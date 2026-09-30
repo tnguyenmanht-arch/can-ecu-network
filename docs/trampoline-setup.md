@@ -25,6 +25,8 @@ PATH="/c/winlibs/<thư mục winlibs>/mingw64/bin:$PATH" python third_party/tram
 
 Thiếu `CMSIS_5` thì khi build sẽ báo lỗi `core_cm4.h: No such file`.
 
+Gặp `Filename too long` / `Unable to checkout ... in submodule path` trên Windows là do đường dẫn vượt 260 ký tự (Trampoline có file nằm rất sâu). Sửa bằng `git config --global core.longpaths true`, hoặc clone vào thư mục có đường dẫn ngắn. Đã kiểm tra 30/9: clone theo các lệnh trên vào `Documents/` chạy đúng, submodule khoảng 54 MB.
+
 **Sửa Trampoline** (thêm bản vá, port target mới): commit trong `third_party/trampoline` trên branch `amr-f407`, push lên fork, rồi commit con trỏ submodule ở repo này (`git add third_party/trampoline`).
 
 ## 3. Build một app

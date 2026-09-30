@@ -30,6 +30,9 @@ git submodule update --init third_party/trampoline
 git -C third_party/trampoline submodule update --init --depth 1 machines/cortex-m/CMSIS_5
 ```
 
+**Trên Windows:** Trampoline có đường dẫn file rất dài. Nếu gặp lỗi `Filename too long`, chạy
+`git config --global core.longpaths true` hoặc clone vào thư mục có đường dẫn ngắn (ví dụ `C:\Users\<tên>\Documents\`).
+
 Build goil và app Trampoline: [`docs/trampoline-setup.md`](docs/trampoline-setup.md).
 
 ## Thư mục
