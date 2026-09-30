@@ -1,0 +1,6 @@
+[submodule "third_party/trampoline"]
+	path = third_party/trampoline
+	url = https://github.com/tnguyenmanht-arch/trampoline.git
+	branch = amr-f407
+	shallow = true
+	ignore = untracked
