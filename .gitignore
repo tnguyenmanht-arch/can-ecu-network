@@ -1,0 +1,19 @@
+# Tài liệu tham khảo tải về (datasheet, schematic, chuẩn OSEK...) — chỉ để ở máy, KHÔNG commit
+reference/
+
+# Build của STM32CubeIDE
+Debug/
+Release/
+*.su
+.settings/
+*.launch
+
+# Python
+__pycache__/
+*.pyc
+
+# Build của Trampoline (goil + make.py) nằm trong từng app, xem tests/target/.gitignore
+
+# OS
+Thumbs.db
+.DS_Store
