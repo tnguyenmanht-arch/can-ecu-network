@@ -26,7 +26,7 @@ Chi tiết kiến trúc, nguyên tắc module, dải ID, CAN matrix, cách đấ
 - ⭐ **User là người mới, muốn TỰ học và TỰ làm để báo cáo được.** Thứ tự: đọc → hiểu → thiết kế (Claude giảng) → code (user viết, Claude review) → test
 - **Claude KHÔNG tự viết code hay tự chuyển sang bước sau khi user chưa yêu cầu.** Mỗi đầu việc có một mức: **Tự làm** (Claude chỉ gợi ý) / **Làm cùng** (Claude giải thích hoặc viết khung, user viết phần chính) / **Claude làm, user giải thích lại** (chỉ cho phần hạ tầng ít giá trị học)
 - Giải thích cho người mới: định nghĩa thuật ngữ, ví dụ cụ thể từ chính dự án
-- **Sổ tay làm việc (Claude Docs):** https://claude.ai/code/artifact/b8999f1f-6937-4e05-b481-7cafc3363337. Có 3 tab: Lộ trình, Thuật ngữ & ghi chú (có mục "Hỏi đáp với Claude"), Nhật ký. ⚠️ **Tab Lộ trình vẫn viết theo hướng CŨ** (OSEK trên xe AMR), cần viết lại theo hướng mạng CAN khi user yêu cầu. Phần lý thuyết OSEK/Trampoline trong đó vẫn dùng được
+- **Sổ tay làm việc (Claude Docs):** https://claude.ai/code/artifact/b8999f1f-6937-4e05-b481-7cafc3363337. Có 3 tab: Lộ trình, Thuật ngữ & ghi chú (có mục "Hỏi đáp với Claude"), Nhật ký. Viết lại theo hướng mạng CAN ngày 1/10/2026: **10 giai đoạn (GĐ 0–9), 2 mốc go/no-go**; câu hỏi tự kiểm tra đánh số theo GĐ (0.1, 1.1...)
 
 ### An toàn
 - **Mọi bước nạp code, hoặc làm cơ cấu chấp hành hoạt động, phải có xác nhận của user ở lượt ngay trước đó.** Không gộp "chuẩn bị" và "chạy" vào một tin nhắn
@@ -43,12 +43,12 @@ Chi tiết kiến trúc, nguyên tắc module, dải ID, CAN matrix, cách đấ
 ## 3. Trạng thái (cập nhật thủ công)
 
 **30/9/2026 — chưa có firmware mạng CAN, chưa nạp gì.**
-- ✅ DBC nháp 0.1 (`can/vehicle.dbc`): 4 message, kiểm bằng cantools: hợp lệ, không chồng bit, tải bus lý thuyết 3,0 % ở 500 kbit/s
+- ✅ DBC nháp 0.2 (`can/vehicle.dbc`, 5/10): 6 message. Thêm khoá cửa trung tâm: `LockStatus` 0x310 (ECU3 → Jetson), `LockCommand` 0x500 (Jetson → ECU3, gửi theo sự kiện; gateway chỉ được gửi dải 0x500–0x5FF), và `GearActual` trong 0x100. Kiểm bằng cantools `strict=True`: hợp lệ. Tải bus lý thuyết ở 500 kbit/s: **3,3 %** theo chu kỳ (122 khung/s), **5,5 %** xấu nhất (`BodyStatus`, `LockStatus` gửi theo sự kiện tối đa 50 khung/s)
 - ✅ Tài liệu kiến trúc; cấu trúc repo và 4 quyết định thiết kế **đã chốt** (mục 7 của tài liệu kiến trúc): repo riêng + Trampoline qua fork/submodule; commit `gen/`; RTE sinh thẳng từ DBC; một driver bxCAN mức thanh ghi dùng chung
 - ✅ Trampoline + goil build được trên Windows, đã vá hard-float + `USEFLOAT`; `tests/target/fpu_check` build đạt (chưa nạp). Xem `docs/trampoline-setup.md`
 - ✅ `f407_bringup/`: firmware kiểm tra board Hiwonder khi hàng về (port từ xe, giữ K1 khi reset để vào chế độ bring-up). **Tên project CubeIDE vẫn là `amr_stm32f407`.** Checklist: `docs/bringup-f407.md`
 - ⏳ Board Hiwonder chưa về. Cần mua thêm: 1× F103C8T6 (đã có 1), 3× SN65HVD230, dây xoắn đôi
-- ⏳ Đề cương cũ (`reference/ĐA/DAKS...pdf`, bản 28/9) viết theo xe AMR → cần viết lại theo hướng mạng CAN
+- 📝 Đề cương mới (Claude Doc, 1/10, chờ GVHD duyệt): https://claude.ai/code/artifact/af6e2b14-e170-4eb3-9d70-5dee7526f16d. Bản cũ 28/9 (`reference/ĐA/DAKS...pdf`) viết theo xe AMR, không dùng nữa. Đề xuất ĐACN (1/10): `reference/ĐA/Đề xuất ĐACN — HMI cụm đồng hồ trên Android.pdf`, chốt gói JSON Jetson → app qua WebSocket và ngưỡng cửa mở 3 km/h dùng chung với buzzer VCU
 - Tài liệu lý thuyết core: chuẩn OSEK OS 2.2.3 (`reference/osek/os223.pdf`), Trampoline Handbook (`third_party/trampoline/documentation/manual/main.pdf`), 2 bảng tra `documentation/qrdc/`. **Từ hướng mới, COM nằm trong phạm vi**: `reference/osek/OSEKCOM303.pdf` (OSEK COM) và chuẩn AUTOSAR SWS COM
 
 ### Quy tắc OSEK (Trampoline)

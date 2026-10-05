@@ -1,4 +1,4 @@
-VERSION "0.1-draft"
+VERSION "0.2-draft"
 
 
 NS_ :
@@ -21,8 +21,9 @@ BO_ 128 Pedal: 8 ECU2_Pedal
  SG_ Gear : 16|3@1+ (1,0) [0|7] "" ECU1_VCU,JETSON_GW
 
 BO_ 256 VehSpeed: 8 ECU1_VCU
- SG_ VehicleSpeed : 0|16@1+ (0.01,0) [0|250] "km/h" JETSON_GW
+ SG_ VehicleSpeed : 0|16@1+ (0.01,0) [0|250] "km/h" ECU3_Body,JETSON_GW
  SG_ MotorRpm : 16|16@1- (1,0) [-12000|12000] "rpm" JETSON_GW
+ SG_ GearActual : 32|3@1+ (1,0) [0|7] "" JETSON_GW
 
 BO_ 768 BodyStatus: 8 ECU3_Body
  SG_ DoorFL : 0|1@1+ (1,0) [0|1] "" ECU1_VCU,JETSON_GW
@@ -33,39 +34,58 @@ BO_ 768 BodyStatus: 8 ECU3_Body
  SG_ TurnRight : 9|1@1+ (1,0) [0|1] "" JETSON_GW
  SG_ Headlight : 16|2@1+ (1,0) [0|3] "" JETSON_GW
 
+BO_ 784 LockStatus: 8 ECU3_Body
+ SG_ LockState : 0|2@1+ (1,0) [0|3] "" JETSON_GW
+ SG_ LockSource : 8|2@1+ (1,0) [0|3] "" JETSON_GW
+ SG_ LockCmdCounterEcho : 16|4@1+ (1,0) [0|15] "" JETSON_GW
+ SG_ LockCmdResult : 24|2@1+ (1,0) [0|3] "" JETSON_GW
+
 BO_ 1024 Battery: 8 ECU1_VCU
  SG_ Soc_pct : 0|8@1+ (0.5,0) [0|100] "%" JETSON_GW
  SG_ BattVoltage : 8|16@1+ (0.1,0) [0|500] "V" JETSON_GW
  SG_ LowBattWarn : 24|1@1+ (1,0) [0|1] "" JETSON_GW
 
+BO_ 1280 LockCommand: 8 JETSON_GW
+ SG_ LockReq : 0|2@1+ (1,0) [0|3] "" ECU3_Body
+ SG_ LockCmdCounter : 8|4@1+ (1,0) [0|15] "" ECU3_Body
 
 
-CM_ "Mang CAN mo phong o to tren ban (DAKS). Ban nhap 0.1, se chinh. CAN thuong 500 kbit/s, ID 11 bit. Quy uoc chung: moi message dai 8 byte (du cho de them tin hieu ma khong doi DLC); byte order Intel (little endian); gia tri tho toan bit 1 = SNA (khong co du lieu). Dai ID: 0x080-0x1FF truyen dong + khung gam, 0x300-0x3FF than xe, 0x400-0x4FF pin, 0x500-0x5FF HMI gui nguoc, 0x700-0x7FF chan doan UDS.";
-CM_ BU_ ECU1_VCU "VCU: board Hiwonder ROS Robot Controller (STM32F407VET6) chay Trampoline OSEK. Chua mo hinh xe don gian, dat o mot dau bus (tro 120 ohm R23 co san tren board).";
+
+CM_ "Mang CAN mo phong o to tren ban (DAKS). Ban nhap 0.2, se chinh. CAN thuong 500 kbit/s, ID 11 bit. Quy uoc chung: moi message dai 8 byte (du cho de them tin hieu ma khong doi DLC); byte order Intel (little endian); quy uoc SNA (khong co du lieu): tin hieu khong dau = toan bit 1 (0xFF voi 8 bit, 0xFFFF voi 16 bit); tin hieu co dau = gia tri nho nhat (0x8000 voi 16 bit); tin hieu 1 bit khong co SNA, mat du lieu phat hien bang timeout. Dai ID: 0x080-0x1FF truyen dong + khung gam, 0x300-0x3FF than xe, 0x400-0x4FF pin, 0x500-0x5FF HMI -> ECU (lenh tu app qua Jetson), 0x700-0x7FF chan doan UDS.";
+CM_ BU_ ECU1_VCU "VCU: board Hiwonder ROS Robot Controller (STM32F407VET6) chay Trampoline OSEK. Chua mo hinh xe don gian, dat o mot dau bus (tro 120 ohm R23 co san tren board). Canh bao cua mo khi xe chay (VehicleSpeed > 3 km/h): bat buzzer PA8 va LED den bao.";
 CM_ BU_ ECU2_Pedal "Pedal: STM32F103C8T6 + SN65HVD230. Bien tro = chan ga, nut = phanh, cong tac = so P/R/N/D.";
-CM_ BU_ ECU3_Body "Body: STM32F103C8T6 + SN65HVD230. Cong tac cua, can xi-nhan, den pha; dieu khien LED xi-nhan va LED phanh.";
-CM_ BU_ JETSON_GW "Jetson Orin Nano: gateway/cockpit. Chi nghe bus (chua gui gi), giai ma theo DBC nay roi gui sang Android theo TEN tin hieu.";
+CM_ BU_ ECU3_Body "Body: STM32F103C8T6 + SN65HVD230. Cong tac cua, can xi-nhan, den pha; dieu khien LED xi-nhan, LED phanh va co cau khoa cua (servo SG90 hoac LED mo phong, chua chon). La ben quyet dinh cuoi cung ve khoa, theo huong an toan = mo duoc: chi tu choi lenh MO tu app khi VehicleSpeed > 15 km/h; nut tren ECU3 luon mo duoc; tu khoa khi VehicleSpeed > 15 km/h; mat VehSpeed thi khong tu khoa va khong chan mo.";
+CM_ BU_ JETSON_GW "Jetson Orin Nano: gateway/cockpit. Giai ma bus theo DBC nay roi gui sang Android theo TEN tin hieu. Chieu nguoc lai: nhan lenh tu app va gui len bus. Gateway CHI duoc gui ID trong dai 0x500-0x5FF; moi ID khac bi chan.";
 CM_ BO_ 128 "Trang thai ban dap va can so. Gui moi 20 ms. Byte 6-7 de trong, du phong cho E2E (counter + CRC) neu chon phan mo rong E2E.";
 CM_ SG_ 128 AccelPedal_pct "Do dap chan ga. Buoc 0.5 % (201 muc cho 0-100 %, du min so voi bien tro qua ADC 12 bit). Tho 255 = SNA, vi du dut day bien tro.";
 CM_ SG_ 128 Brake "Nut phanh: 1 = dang dap. ECU3 dung tin hieu nay de bat LED phanh.";
-CM_ SG_ 128 Gear "Vi tri can so. 3 bit, du cho 4 so + du phong; 7 = SNA.";
+CM_ SG_ 128 Gear "So nguoi lai YEU CAU (vi tri can so). 3 bit, du cho 4 so + du phong; 7 = SNA. So xe thuc su cai la GearActual trong VehSpeed.";
 CM_ BO_ 256 "Trang thai chuyen dong tu mo hinh xe trong VCU. Gui moi 20 ms.";
 CM_ SG_ 256 VehicleSpeed "Toc do xe (do lon, khong dau). Buoc 0.01 km/h, 16 bit toi 655.34 km/h; mo hinh gioi han 250. Chieu chay suy tu Gear. Tho 0xFFFF = SNA.";
 CM_ SG_ 256 MotorRpm "Vong quay mo-to, CO DAU: am khi lui (so R). 16 bit co dau, buoc 1 rpm. Gia su mo-to toi da 12000 rpm (co the chinh theo mo hinh). Tho 0x8000 = SNA.";
+CM_ SG_ 256 GearActual "So VCU THUC SU cai, tach khoi so nguoi lai yeu cau (Gear trong Pedal). VCU co the khong doi so, vi du khong vao R khi xe dang tien. Cung bang ma voi Gear; 7 = SNA.";
 CM_ BO_ 768 "Trang thai than xe. Gui moi 100 ms VA gui ngay khi co tin hieu doi (khong nhanh hon GenMsgDelayTime).";
 CM_ SG_ 768 DoorFL "Cua truoc trai: 1 = mo. Ban cung dau tien chi co 1 cong tac cua noi vao DoorFL; 3 cua con lai gui 0 (dong).";
 CM_ SG_ 768 TurnLeft "Can xi-nhan gat sang trai (1 = dang bat). Day la trang thai CAN GAT, khong phai trang thai den dang sang: ECU3 tu nhay LED, HMI tu nhay bieu tuong.";
 CM_ SG_ 768 TurnRight "Can xi-nhan gat sang phai (1 = dang bat). Xem ghi chu TurnLeft.";
 CM_ SG_ 768 Headlight "Den pha. 2 bit: 0 tat, 1 cos, 2 pha, 3 SNA. Ban cung dau chi co cong tac bat/tat (0/1); muc 2 de danh.";
+CM_ BO_ 784 "Trang thai khoa cua trung tam tu ECU3. Gui moi 100 ms VA gui ngay khi trang thai doi (khong nhanh hon GenMsgDelayTime).";
+CM_ SG_ 784 LockState "Trang thai khoa: 0 mo, 1 khoa, 2 loi (ECU3 tu phat hien; cach phat hien chot o giai doan thiet ke), 3 SNA.";
+CM_ SG_ 784 LockSource "Nguon cua lan doi trang thai gan nhat: 0 app, 1 tu khoa theo toc do, 2 nut tren ECU3, 3 SNA.";
+CM_ SG_ 784 LockCmdCounterEcho "Tra lai LockCmdCounter cua lenh gan nhat ECU3 da xu ly (ke ca lenh bi tu choi). App dung de do vong lenh; qua 500 ms ke tu luc gui lenh ma chua thay echo trung thi bao khoa khong phan hoi. 15 = SNA (chua xu ly lenh nao).";
+CM_ SG_ 784 LockCmdResult "Ket qua xu ly lenh co bo dem bang LockCmdCounterEcho: 0 Done (da thuc hien), 1 Rejected (ECU3 tu choi, vi du lenh mo khi VehicleSpeed > 15 km/h), 2 AlreadyInState (da o dung trang thai yeu cau), 3 SNA.";
 CM_ BO_ 1024 "Trang thai pin tu mo hinh trong VCU. Gui moi 500 ms (pin thay doi cham).";
 CM_ SG_ 1024 Soc_pct "Muc pin con lai. Buoc 0.5 %. Tho 255 = SNA.";
 CM_ SG_ 1024 BattVoltage "Dien ap bo pin mo phong. Buoc 0.1 V, 16 bit. Gia su bo pin xe dien khoang 350-400 V (so mo phong, khong phai pin that). Tho 0xFFFF = SNA.";
 CM_ SG_ 1024 LowBattWarn "Canh bao pin yeu: 1 = Soc duoi nguong (nguong dat trong VCU, du kien 20 %).";
+CM_ BO_ 1280 "Lenh khoa/mo cua tu app, Jetson dich sang CAN. Chi gui theo su kien (moi lan bam), khong gui theo chu ky nen khong co timeout. ECU3 quyet dinh co thuc hien hay khong va bao lai qua LockStatus.";
+CM_ SG_ 1280 LockReq "0 khong lam gi, 1 khoa, 2 mo, 3 SNA.";
+CM_ SG_ 1280 LockCmdCounter "Tang 1 moi lan bam de ECU3 phan biet hai lan bam lien tiep cung mot lenh. Dem 0-14 roi quay ve 0; 15 = SNA theo quy uoc chung.";
 
 BA_DEF_ "BusType" STRING ;
 BA_DEF_ "Baudrate" INT 0 1000000;
 BA_DEF_ BO_ "GenMsgCycleTime" INT 0 65535;
-BA_DEF_ BO_ "GenMsgSendType" ENUM "Cyclic","CyclicAndOnChange";
+BA_DEF_ BO_ "GenMsgSendType" ENUM "Cyclic","CyclicAndOnChange","Event";
 BA_DEF_ BO_ "GenMsgDelayTime" INT 0 65535;
 BA_DEF_ BO_ "GenMsgTimeoutTime" INT 0 65535;
 BA_DEF_DEF_ "BusType" "CAN";
@@ -84,15 +104,27 @@ BA_ "GenMsgCycleTime" BO_ 768 100;
 BA_ "GenMsgSendType" BO_ 768 1;
 BA_ "GenMsgDelayTime" BO_ 768 20;
 BA_ "GenMsgTimeoutTime" BO_ 768 500;
+BA_ "GenMsgCycleTime" BO_ 784 100;
+BA_ "GenMsgSendType" BO_ 784 1;
+BA_ "GenMsgDelayTime" BO_ 784 20;
+BA_ "GenMsgTimeoutTime" BO_ 784 500;
 BA_ "GenMsgCycleTime" BO_ 1024 500;
 BA_ "GenMsgTimeoutTime" BO_ 1024 2500;
+BA_ "GenMsgSendType" BO_ 1280 2;
 
 VAL_ 128 AccelPedal_pct 255 "SNA" ;
 VAL_ 128 Gear 7 "SNA" 3 "D" 2 "N" 1 "R" 0 "P" ;
 VAL_ 256 VehicleSpeed 65535 "SNA" ;
 VAL_ 256 MotorRpm -32768 "SNA" ;
+VAL_ 256 GearActual 7 "SNA" 3 "D" 2 "N" 1 "R" 0 "P" ;
 VAL_ 768 Headlight 3 "SNA" 2 "HighBeam" 1 "LowBeam" 0 "Off" ;
+VAL_ 784 LockState 3 "SNA" 2 "Fault" 1 "Locked" 0 "Unlocked" ;
+VAL_ 784 LockSource 3 "SNA" 2 "Ecu3Button" 1 "AutoSpeed" 0 "App" ;
+VAL_ 784 LockCmdCounterEcho 15 "SNA" ;
+VAL_ 784 LockCmdResult 3 "SNA" 2 "AlreadyInState" 1 "Rejected" 0 "Done" ;
 VAL_ 1024 Soc_pct 255 "SNA" ;
 VAL_ 1024 BattVoltage 65535 "SNA" ;
+VAL_ 1280 LockReq 3 "SNA" 2 "Unlock" 1 "Lock" 0 "NoAction" ;
+VAL_ 1280 LockCmdCounter 15 "SNA" ;
 
 SIG_GROUP_ 128 PedalGroup 1 : AccelPedal_pct Brake Gear;

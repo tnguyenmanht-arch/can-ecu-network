@@ -1,14 +1,15 @@
 # Mạng ECU ô tô trên bàn qua CAN (ĐAKS)
 
 Hướng đồ án chốt với GVHD ngày 30/9/2026. Đây là bản kiến trúc đầu tiên, **chưa có firmware**.
-Hợp đồng giữa các ECU là file [`can/vehicle.dbc`](../can/vehicle.dbc) (bản nháp 0.1).
+Hợp đồng giữa các ECU là file [`can/vehicle.dbc`](../can/vehicle.dbc) (bản nháp 0.2).
 
 ## 1. Mục tiêu
 
 Mô phỏng một mạng ECU ô tô nhỏ trên bàn: 3 ECU vi điều khiển và 1 máy tính hiệu năng cao nối
 chung một bus CAN, phần mềm chia tầng theo kiểu AUTOSAR (SWC → RTE → COM → CanIf → driver).
 ECU trung tâm (VCU) chạy hệ điều hành OSEK (Trampoline). Dữ liệu cuối cùng hiển thị trên app
-Android (thuộc ĐACN, làm riêng).
+HMI màn hình trung tâm Android (thuộc ĐACN, làm riêng). App còn gửi lệnh khoá/mở cửa trung tâm
+ngược xuống ECU3, qua Jetson.
 
 Không còn thuộc đồ án: xe AMR, jitter và điều khiển chuyển động, thí nghiệm E1–E4.
 
@@ -22,23 +23,40 @@ Không còn thuộc đồ án: xe AMR, jitter và điều khiển chuyển độ
  ECU1 VCU        ECU2 Pedal          ECU3 Body           Jetson Orin Nano             + GND chung)
  F407 + VP230    F103 + SN65HVD230   F103 + SN65HVD230   J17 + SN65HVD230
  Trampoline      bare-metal HAL      bare-metal HAL      Linux, SocketCAN
-                                                             │ theo TÊN tín hiệu
+ + buzzer, LED   ga, phanh, số       + cơ cấu khoá       gửi 0x500 (lệnh khoá)
+                                                             ↑ tín hiệu theo TÊN
+                                                             ↓ lệnh khoá/mở
                                                           Android HMI (ĐACN)
 ```
 
 | Node | Phần cứng | Phần mềm | Gửi | Nhận |
 |---|---|---|---|---|
-| ECU1 VCU | Hiwonder ROS Robot Controller (STM32F407VET6), transceiver VP230 và trở 120 Ω R23 **có sẵn trên board** | Trampoline (OSEK): ISR2 nhận CAN, Alarm gửi theo chu kỳ, Resource bảo vệ dữ liệu chung | `VehSpeed`, `Battery` | `Pedal`, `BodyStatus` |
+| ECU1 VCU | Hiwonder ROS Robot Controller (STM32F407VET6), transceiver VP230 và trở 120 Ω R23 **có sẵn trên board**. Buzzer PA8; LED đèn báo rời (đề xuất PE2, xem mục 5) | Trampoline (OSEK): ISR2 nhận CAN, Alarm gửi theo chu kỳ, Resource bảo vệ dữ liệu chung | `VehSpeed`, `Battery` | `Pedal`, `BodyStatus` |
 | ECU2 Pedal | STM32F103C8T6 + SN65HVD230. Biến trở = chân ga, nút = phanh, công tắc = số P/R/N/D | Bare-metal HAL + COM chung | `Pedal` | — |
-| ECU3 Body | STM32F103C8T6 + SN65HVD230. Công tắc cửa, cần xi-nhan, công tắc đèn pha; LED xi-nhan, LED phanh | Bare-metal HAL + COM chung | `BodyStatus` | `Pedal` (lấy `Brake` để bật LED phanh) |
-| Jetson (gateway) | Orin Nano, CAN qua header J17 + SN65HVD230 | Linux, SocketCAN (`mttcan`), Python + cantools | — (bản đầu chỉ nghe) | Tất cả |
-| Android HMI | Điện thoại/tablet | App Kotlin (ĐACN, repo/thư mục riêng) | — | Tín hiệu theo tên, từ Jetson |
+| ECU3 Body | STM32F103C8T6 + SN65HVD230. Công tắc cửa, cần xi-nhan, công tắc đèn pha, nút khoá/mở; LED xi-nhan, LED phanh; cơ cấu khoá (servo SG90 hoặc LED mô phỏng, chưa chọn) | Bare-metal HAL + COM chung | `BodyStatus`, `LockStatus` | `Pedal` (lấy `Brake` để bật LED phanh), `VehSpeed` (lấy `VehicleSpeed` để tự khoá), `LockCommand` |
+| Jetson (gateway) | Orin Nano, CAN qua header J17 + SN65HVD230 | Linux, SocketCAN (`mttcan`), Python + cantools. Chỉ được gửi ID trong dải 0x500–0x5FF | `LockCommand` (dịch từ lệnh của app) | Tất cả |
+| Android HMI | Tablet hoặc máy ảo Android | App Kotlin, màn hình trung tâm (ĐACN, repo riêng) | Lệnh khoá/mở, qua Jetson | Tín hiệu theo tên, từ Jetson |
 
 **Chức năng của VCU:**
 - Mô hình xe đơn giản: ga làm tăng tốc; phanh và lực cản làm giảm tốc.
 - Tính và gửi tốc độ, vòng quay mô-tơ, % pin (pin giảm theo tải).
-- Buzzer (PA8) kêu khi cửa mở lúc xe đang chạy.
+- Cảnh báo cửa mở khi xe chạy (`VehicleSpeed` > 3 km/h, ngưỡng chốt chung với ĐACN): bật cả buzzer (PA8) và LED đèn báo.
 - Giám sát timeout của các ECU khác.
+
+**Chức năng khoá cửa trung tâm của ECU3:**
+- Nhận lệnh từ app (`LockCommand` 0x500, qua Jetson) và từ nút khoá/mở trên ECU3.
+- **ECU3 là bên quyết định cuối cùng**, theo hướng **an toàn = mở được** (người trong xe luôn thoát ra được):
+  - Chỉ từ chối lệnh **mở từ app** khi `VehicleSpeed` > 15 km/h.
+  - Nút khoá/mở trên ECU3 **luôn mở được**.
+  - Tự khoá khi `VehicleSpeed` > 15 km/h. Đề xuất: khoá một lần khi tốc độ vượt ngưỡng (sườn lên), không khoá lặp lại.
+  - Mất `VehSpeed` (quá timeout 100 ms) thì **không tự khoá và không chặn mở**.
+- Báo trạng thái qua `LockStatus` (0x310): theo chu kỳ 100 ms và ngay khi đổi. `LockCmdCounterEcho` trả lại bộ đếm của lệnh gần nhất đã xử lý; `LockCmdResult` cho biết lệnh đó đã làm (Done), bị từ chối (Rejected) hay đã ở đúng trạng thái (AlreadyInState).
+- Cơ cấu khoá, chọn sau:
+
+  | Phương án | Ưu | Nhược |
+  |---|---|---|
+  | Servo SG90 | Chuyển động thật, demo trực quan | Là cơ cấu chấp hành: cần nguồn 5 V riêng (dòng có thể lên vài trăm mA khi quay hoặc kẹt), không lấy từ 3,3 V của F103; GND chung; cần 1 kênh PWM 50 Hz; không có phản hồi vị trí |
+  | LED mô phỏng | Đơn giản, an toàn, không cần nguồn thêm | Kém trực quan |
 
 **Mở rộng tuỳ chọn:**
 - ECU4 BMS.
@@ -75,48 +93,74 @@ COM và CanIf viết bằng **C thuần, không gọi HAL**, dùng chung y hệt
 | 0x080–0x1FF | Truyền động và khung gầm |
 | 0x300–0x3FF | Thân xe |
 | 0x400–0x4FF | Pin, năng lượng |
-| 0x500–0x5FF | HMI gửi ngược |
+| 0x500–0x5FF | HMI → ECU (lệnh từ app, qua Jetson). Gateway chỉ được gửi ID trong dải này |
 | 0x700–0x7FF | Chẩn đoán UDS |
 
 ID nhỏ thắng khi tranh chấp bus, nên dữ liệu truyền động có ưu tiên cao nhất.
 
 **d) Jetson và Android không phụ thuộc layout byte.** Jetson giải mã theo DBC và gửi đi theo tên tín hiệu, giống Vehicle HAL của Android Automotive. Nếu mất một ECU thì hiển thị "không có dữ liệu", không được báo lỗi hay treo.
 
-## 4. CAN matrix (bản nháp 0.1)
+Chiều ngược lại, từ app xuống bus: Jetson là cửa ngõ duy nhất từ mạng ngoài (Wi-Fi) vào bus CAN, nên gateway **chặn mọi ID ngoài dải 0x500–0x5FF**. ECU nhận vẫn tự kiểm tra (SNA, bộ đếm) và có quyền từ chối lệnh.
+
+**e) Ba tầng cảnh báo.** An toàn nằm ở ECU; app chỉ hiển thị lại.
+
+| Tầng | Ở đâu | Làm gì | Ví dụ trong dự án |
+|---|---|---|---|
+| 1. Hành động an toàn | ECU, tự quyết | Tự đưa hệ về trạng thái an toàn, không chờ ai | ECU3 tự khoá khi `VehicleSpeed` > 15 km/h, từ chối lệnh mở từ app khi > 15 km/h (nút trên ECU3 luôn mở được); VCU xử lý khi mất `Pedal` |
+| 2. Cảnh báo tại chỗ | ECU, phần cứng gắn trên ECU | Báo người lái bằng âm thanh, đèn | VCU bật buzzer PA8 và LED đèn báo khi cửa mở và `VehicleSpeed` > 3 km/h |
+| 3. Hiển thị lại | App Android (ĐACN), qua Jetson | Hiển thị trạng thái và cảnh báo mà tầng 1–2 đã quyết; không quyết định an toàn | Biểu tượng cửa mở, trạng thái khoá, cảnh báo "khoá không phản hồi" |
+
+Tầng 1–2 phải chạy đúng cả khi Jetson tắt hoặc mất Wi-Fi. Ngưỡng 3 km/h dùng chung cho tầng 2 và tầng 3.
+
+## 4. CAN matrix (bản nháp 0.2)
 
 Quy ước chung:
 - CAN thường 500 kbit/s, ID 11 bit (F407 và F103 không có CAN FD).
 - Mọi message dài **8 byte**, để thêm tín hiệu sau này mà không phải đổi DLC.
 - Thứ tự byte kiểu Intel (little endian).
-- Giá trị thô toàn bit 1 nghĩa là **SNA** (không có dữ liệu).
+- **SNA** (không có dữ liệu): tín hiệu không dấu thì giá trị thô **toàn bit 1** (0xFF với 8 bit, 0xFFFF với 16 bit); tín hiệu có dấu thì **giá trị nhỏ nhất** (0x8000 với 16 bit). Tín hiệu 1 bit không có SNA; mất dữ liệu phát hiện bằng timeout.
 
 | ID | Gửi từ | Message | Chu kỳ | Timeout (đề xuất) | Tín hiệu |
 |---|---|---|---|---|---|
 | 0x080 | ECU2 | `Pedal` | 20 ms | 100 ms | `AccelPedal_pct`, `Brake`, `Gear` |
-| 0x100 | ECU1 | `VehSpeed` | 20 ms | 100 ms | `VehicleSpeed`, `MotorRpm` |
+| 0x100 | ECU1 | `VehSpeed` | 20 ms | 100 ms | `VehicleSpeed`, `MotorRpm`, `GearActual` |
 | 0x300 | ECU3 | `BodyStatus` | 100 ms, và gửi ngay khi đổi (cách nhau tối thiểu 20 ms) | 500 ms | `DoorFL/FR/RL/RR`, `TurnLeft`, `TurnRight`, `Headlight` |
+| 0x310 | ECU3 | `LockStatus` | 100 ms, và gửi ngay khi đổi (cách nhau tối thiểu 20 ms) | 500 ms | `LockState`, `LockSource`, `LockCmdCounterEcho`, `LockCmdResult` |
 | 0x400 | ECU1 | `Battery` | 500 ms | 2500 ms | `Soc_pct`, `BattVoltage`, `LowBattWarn` |
+| 0x500 | Jetson | `LockCommand` | Theo sự kiện (mỗi lần bấm) | — | `LockReq`, `LockCmdCounter` |
 
-Timeout lấy bằng 5 chu kỳ. Đây là con số khởi điểm, sẽ đo thời gian phát hiện mất ECU để chỉnh lại.
+Timeout lấy bằng 5 chu kỳ; `LockCommand` không gửi theo chu kỳ nên không có timeout (mất lệnh phát hiện qua echo). Đây là con số khởi điểm, sẽ đo thời gian phát hiện mất ECU để chỉnh lại.
 
 | Tín hiệu | Bit | Độ dài | Tỉ lệ, đơn vị | Dải | Giả định |
 |---|---|---|---|---|---|
 | `AccelPedal_pct` | 0 | 8 | 0,5 % | 0–100 | 255 = SNA (ví dụ đứt dây biến trở) |
 | `Brake` | 8 | 1 | — | 0/1 | 1 = đang đạp |
-| `Gear` | 16 | 3 | enum | 0 P, 1 R, 2 N, 3 D, 7 SNA | |
+| `Gear` | 16 | 3 | enum | 0 P, 1 R, 2 N, 3 D, 7 SNA | Số người lái **yêu cầu** |
 | `VehicleSpeed` | 0 | 16 | 0,01 km/h | 0–250 | Độ lớn, không dấu; chiều chạy suy từ `Gear` |
 | `MotorRpm` | 16 | 16 có dấu | 1 rpm | ±12000 | Âm khi lùi; 0x8000 = SNA |
+| `GearActual` | 32 | 3 | enum | như `Gear` | Số VCU **thực sự cài**; có thể khác `Gear`, ví dụ không vào R khi xe đang tiến |
 | `DoorFL…DoorRR` | 0–3 | 1 mỗi cửa | — | 0/1 | 1 = mở. Bản đầu chỉ có 1 công tắc, nối vào `DoorFL` |
 | `TurnLeft`, `TurnRight` | 8, 9 | 1 | — | 0/1 | Trạng thái **cần gạt**, không phải đèn đang sáng. ECU3 tự nháy LED, HMI tự nháy biểu tượng |
 | `Headlight` | 16 | 2 | enum | 0 tắt, 1 cos, 2 pha, 3 SNA | Bản đầu chỉ có công tắc bật/tắt |
 | `Soc_pct` | 0 | 8 | 0,5 % | 0–100 | |
 | `BattVoltage` | 8 | 16 | 0,1 V | 0–500 | Bộ pin xe điện mô phỏng khoảng 350–400 V |
 | `LowBattWarn` | 24 | 1 | — | 0/1 | Ngưỡng đặt trong VCU, dự kiến 20 % |
+| `LockState` | 0 | 2 | enum | 0 mở, 1 khoá, 2 lỗi, 3 SNA | |
+| `LockSource` | 8 | 2 | enum | 0 app, 1 tự khoá theo tốc độ, 2 nút trên ECU3, 3 SNA | Nguồn của lần đổi trạng thái gần nhất |
+| `LockCmdCounterEcho` | 16 | 4 | — | 0–14, 15 SNA | Bộ đếm của lệnh gần nhất ECU3 đã xử lý; 15 = chưa xử lý lệnh nào |
+| `LockCmdResult` | 24 | 2 | enum | 0 Done, 1 Rejected, 2 AlreadyInState, 3 SNA | Kết quả của lệnh có bộ đếm bằng `LockCmdCounterEcho` |
+| `LockReq` | 0 | 2 | enum | 0 không làm gì, 1 khoá, 2 mở, 3 SNA | |
+| `LockCmdCounter` | 8 | 4 | — | 0–14, 15 SNA | Tăng 1 mỗi lần bấm, đếm tới 14 rồi về 0 (15 dành cho SNA theo quy ước chung) |
 
 Byte 6–7 của `Pedal` để trống, dự phòng cho E2E (counter + CRC) nếu chọn phần mở rộng đó.
 `AccelPedal_pct`, `Brake`, `Gear` gom thành signal group `PedalGroup`, để bên nhận luôn đọc được bộ 3 giá trị nhất quán.
 
-**Tải bus lý thuyết** (đã kiểm bằng cantools): mỗi khung 8 byte, xấu nhất 135 bit (tính cả bit stuffing), 112 khung/s → **15 120 bit/s = 3,0 %** của 500 kbit/s. Dư rất nhiều chỗ cho ECU4 hoặc UDS.
+**Tải bus lý thuyết** (đọc chu kỳ từ DBC bằng cantools): mỗi khung 8 byte, xấu nhất 135 bit (tính cả bit stuffing).
+- Chỉ tính phần gửi theo chu kỳ: 50 + 50 + 10 + 10 + 2 = 122 khung/s → **16 470 bit/s = 3,3 %** của 500 kbit/s.
+- Xấu nhất, khi `BodyStatus` và `LockStatus` cùng gửi theo sự kiện ở tốc độ tối đa (cách nhau 20 ms, tức 50 khung/s mỗi message): 202 khung/s → 27 270 bit/s = **5,5 %**.
+- `LockCommand` gửi theo lần bấm, không đáng kể.
+
+Vẫn dư rất nhiều chỗ cho ECU4 hoặc UDS.
 
 ## 5. Phần cứng
 
@@ -126,6 +170,10 @@ Byte 6–7 của `Pedal` để trống, dự phòng cho E2E (counter + CRC) nế
 | 1× STM32F103C8T6 | 3× module SN65HVD230 (2 cho F103, 1 cho Jetson) |
 | Jetson Orin Nano | Dây xoắn đôi |
 | ST-Link | Hàng rào chân cho J17 nếu chưa hàn |
+| | LED + trở hạn dòng cho đèn báo ECU1; nút khoá/mở cho ECU3 |
+| | Cơ cấu khoá ECU3: servo SG90 **hoặc** LED + trở (chọn sau) |
+
+**LED đèn báo ECU1:** đề xuất **PE2** trên header H1, là chân để trống theo bảng chân trong `CLAUDE.md` mục 6 (số chân trên H1 cần đối chiếu board thật). **Phải dò schematic V1.1 trước khi hàn.** Không dùng LED có sẵn PE10, vì PE10 đã dùng báo bring-up và nhịp tim. Đặt LED cạnh buzzer trên bàn.
 
 ## 6. Cách đấu bus
 
@@ -146,7 +194,14 @@ Byte 6–7 của `Pedal` để trống, dự phòng cho E2E (counter + CRC) nế
 
 SN65HVD230 dùng nguồn 3,3 V, khớp mức logic của STM32 và Jetson.
 
-**Bit timing:** mọi node phải cùng 500 kbit/s **và cùng điểm lấy mẫu** (khoảng 87,5 %). Clock CAN khác nhau giữa các chip (F407 APB1 = 42 MHz, F103 APB1 = 36 MHz), nên prescaler và số time quanta sẽ tính riêng cho từng chip khi viết driver.
+**Bit timing:** mọi node phải cùng 500 kbit/s, và điểm lấy mẫu nên gần nhau. Clock CAN khác nhau giữa các chip nên tính riêng:
+
+| Chip | Clock CAN (APB1) | Prescaler | Số tq mỗi bit | Điểm lấy mẫu |
+|---|---|---|---|---|
+| F407 (ECU1) | 42 MHz | 6 | 14 (1 sync + BS1 11 + BS2 2) | 85,7 % |
+| F103 (ECU2, ECU3) | 36 MHz | tính ở bài tập 1.3 trong sổ tay | | 87,5 % |
+
+F407 không đạt đúng 87,5 %: 42 MHz / 500 kbit/s = 84, không chia thành bit 8 hoặc 16 tq được. Lệch 1,8 % so với F103 vẫn chấp nhận được, vì bus ngắn trên bàn và clock lấy từ thạch anh. Kiểm lại bằng bộ đếm lỗi TEC/REC khi chạy bus thật.
 
 ## 7. Cấu trúc repo và quyết định thiết kế (chốt 30/9/2026)
 
@@ -190,7 +245,9 @@ Cấu hình CubeMX của firmware F103 cũ (HSE 8 MHz → 72 MHz, SYS Debug = Se
 - **Trampoline chưa có driver CAN cho stm32f407.** Phải tự viết ISR2 cho CAN1 RX và driver bxCAN (mục 7, quyết định 4), cộng với BSP cho board Hiwonder (`docs/trampoline-setup.md`, mục 6).
 - **Jetson J17:** chưa xác nhận pinout, pinmux và mức điện áp trên board thật.
 - **Board Hiwonder:** chưa kiểm tra ngoài đời. Vẫn dùng checklist `docs/bringup-f407.md` cho phần nguồn, nạp code, LED, buzzer; phần motor và servo trong checklist đó không cần nữa.
-- **Chiều truyền Jetson → Android** (WebSocket, UDP hay khác): quyết cùng ĐACN.
+- **Chiều truyền Jetson ↔ Android** (WebSocket, UDP hay khác): quyết cùng ĐACN. Chiều app → Jetson mang lệnh khoá.
+- **Cơ cấu khoá ECU3:** nếu chọn servo SG90 thì đây là cơ cấu chấp hành (nguồn 5 V riêng, GND chung, test cần xác nhận). SG90 không có phản hồi vị trí nên `LockState` = 2 (lỗi) chỉ báo được lỗi ECU3 tự phát hiện; cách phát hiện chốt ở giai đoạn thiết kế.
+- **Lệnh từ app xuống bus:** gateway là cửa ngõ duy nhất từ ngoài vào; phải test chặn ID ngoài dải 0x500–0x5FF.
 
 ## 9. Đánh giá (dự kiến)
 
@@ -199,4 +256,6 @@ Cấu hình CubeMX của firmware F103 cũ (HSE 8 MHz → 72 MHz, SYS Debug = Se
 - Độ trễ đầu–cuối: từ lúc đạp ga (ECU2) đến lúc `VehSpeed` đổi (ECU1), và đến lúc Jetson nhận được.
 - Thời gian phát hiện mất ECU (so với timeout đặt trong DBC).
 - Giả lập lỗi: rút một node, gửi message sai độ dài hoặc sai giá trị.
+- Vòng lệnh khoá: từ lúc Jetson gửi `LockCommand` tới lúc thấy `LockStatus` có echo trùng (đo trên Jetson, một đồng hồ). App coi quá 500 ms là "khoá không phản hồi".
+- Khoá cửa: tự khoá ở 15 km/h; từ chối lệnh mở từ app khi > 15 km/h; nút ECU3 luôn mở được; mất `VehSpeed` thì không tự khoá, không chặn mở; gateway chặn ID ngoài dải 0x500–0x5FF.
 - Phần mở rộng (chọn sau): UDS chẩn đoán (0x7E0/0x7E8) hoặc E2E (counter + CRC) cho `Pedal`.
