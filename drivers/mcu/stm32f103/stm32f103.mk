@@ -20,6 +20,8 @@ CMSIS_DIR := $(REPO_ROOT)/third_party/cmsis_f1
 LDSCRIPT  := $(MCU_DIR)/STM32F103C8_FLASH.ld
 BUILD     ?= build
 
+# Clock dùng chung (HSE 8 MHz → 72 MHz, APB1 36 MHz)
+SRCS += $(MCU_DIR)/clock_f103.c
 # File của ST: SystemInit/SystemCoreClockUpdate và bảng vector + Reset_Handler
 SRCS += $(CMSIS_DIR)/device/Source/system_stm32f1xx.c
 ASRCS := $(CMSIS_DIR)/device/Source/startup_stm32f103xb.s

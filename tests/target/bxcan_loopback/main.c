@@ -5,6 +5,7 @@
  */
 #include "stm32f1xx.h"
 #include "bxcan.h"
+#include "clock_f103.h"
 
 /* ===== Đồng hồ mili-giây ===== */
 volatile uint32_t g_tick_ms = 0;
@@ -15,6 +16,7 @@ void SysTick_Handler(void)
 }
 
 /* ===== Bộ đếm, đọc bằng debugger ===== */
+volatile uint8_t  g_clk_err     = 0;   /* kết quả clock_init(): 0 OK, 1 HSE, 2 PLL, 3 chuyển SW */
 volatile uint8_t  g_init_err    = 0;
 volatile uint32_t g_tx_ok       = 0;
 volatile uint32_t g_tx_busy     = 0;
@@ -62,6 +64,9 @@ int main(void)
     uint16_t rx_id;
     uint8_t  rx_dlc;
     uint32_t t_last;
+
+    /* 72 MHz từ HSE. Lỗi thì vẫn chạy tiếp ở HSI 8 MHz, không dừng, để còn đọc bộ đếm */
+    g_clk_err = clock_init();
 
     SystemCoreClockUpdate();                   /* SystemCoreClock = tần số CPU (Hz) */
     SysTick_Config(SystemCoreClock / 1000U);   /* chia 1000 = số nhịp trong 1 ms → ngắt mỗi 1 ms */
