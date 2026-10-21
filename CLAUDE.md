@@ -38,6 +38,9 @@ Chi tiết kiến trúc, nguyên tắc module, dải ID, CAN matrix, cách đấ
 - COM và CanIf là **C thuần, KHÔNG gọi HAL**, dùng chung F407 và F103. Chỉ driver phụ thuộc chip
 - File trong `gen/` do comgen sinh ra, **commit vào git, KHÔNG sửa tay**
 
+### Git
+- **Chỉ merge vào `main` khi Thắng nói rõ "merge".** Các câu như "đã kiểm tra xong", "đạt" không tính là đồng ý merge
+
 ---
 
 ## 3. Trạng thái (cập nhật thủ công)
