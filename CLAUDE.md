@@ -53,7 +53,7 @@ Chi tiết kiến trúc, nguyên tắc module, dải ID, CAN matrix, cách đấ
 - ✅ Trampoline + goil build được trên Windows, đã vá hard-float + `USEFLOAT`; `tests/target/fpu_check` build đạt (chưa nạp). Xem `docs/trampoline-setup.md`
 - ✅ `f407_bringup/`: firmware kiểm tra board Hiwonder khi hàng về (port từ xe, giữ K1 khi reset để vào chế độ bring-up). **Tên project CubeIDE vẫn là `amr_stm32f407`.** Checklist: `docs/bringup-f407.md`
 - ✅ Board Hiwonder đã về (silkscreen **V1.2**), 22/10. `f407_bringup` build headless đạt (0 lỗi, 0 cảnh báo), chưa nạp
-- ⏳ Cần mua: 4× SN65HVD230, 1× F103C8T6. Hiwonder có sẵn VP230 + R23 120 Ω nên ECU1 nằm ở một đầu bus, không cần SN65HVD230 cho ECU1
+- ⏳ Cần mua: 4× SN65HVD230, 1× F103C8T6, dây xoắn đôi. Hiwonder có sẵn VP230 + R23 120 Ω nên ECU1 nằm ở một đầu bus, không cần SN65HVD230 cho ECU1
 - 📝 Đề cương mới (Claude Doc, 1/10, chờ GVHD duyệt): https://claude.ai/code/artifact/af6e2b14-e170-4eb3-9d70-5dee7526f16d. Bản cũ 28/9 (`reference/ĐA/DAKS...pdf`) viết theo xe AMR, không dùng nữa. Đề xuất ĐACN (1/10): `reference/ĐA/Đề xuất ĐACN — HMI cụm đồng hồ trên Android.pdf`, chốt gói JSON Jetson → app qua WebSocket và ngưỡng cửa mở 3 km/h dùng chung với buzzer VCU
 - Tài liệu lý thuyết core: chuẩn OSEK OS 2.2.3 (`reference/osek/os223.pdf`), Trampoline Handbook (`third_party/trampoline/documentation/manual/main.pdf`), 2 bảng tra `documentation/qrdc/`. **Từ hướng mới, COM nằm trong phạm vi**: `reference/osek/OSEKCOM303.pdf` (OSEK COM) và chuẩn AUTOSAR SWS COM
 
@@ -145,7 +145,7 @@ Chưa có source firmware Hiwonder cho board này.
   - Chỉ dùng pin **LiPo 3S** (tối đa 12.6 V). KHÔNG dùng ắc quy chì hay pin 4S
   - Thêm cầu chì ~5 A trên dây từ pin vào terminal 21
   - Jetson dùng nguồn riêng (19 V) như hiện tại. **KHÔNG** lấy nguồn Jetson từ cổng 5V 5A (số 2)
-- **Mặt sau board ghi V1.0**: theo Hardware Intro FAQ 4, trên V1.0 hai chân **VREF+ và VDDA phải được nối** (bản V1.0 xuất xưởng đã có cầu nối này). Chỉ ảnh hưởng việc đọc điện áp pin qua ADC. Nếu là V1.0 mà không thấy cầu nối thì hàn nối; V1.1 không cần
+- **Mặt sau board ghi V1.0**: theo Hardware Intro FAQ 4, trên V1.0 hai chân **VREF+ và VDDA phải được nối** (bản V1.0 xuất xưởng đã có cầu nối này). Chỉ ảnh hưởng việc đọc điện áp pin qua ADC. Nếu là V1.0 mà không thấy cầu nối thì hàn nối; V1.1 không cần. **Không áp dụng cho V1.2** (board thật)
 - ⚠️ **CẦN ĐO trước khi dùng**: cả 2 cổng USB-C đều đưa VBUS vào rail 5V qua diode 1N5819 (§12, §14). Khi tắt công tắc 20 mà cắm USB, **toàn bộ rail 5V** (encoder, servo 5V, buzzer, MPU) chạy bằng nguồn USB của laptop. Rail VIN có thể bị "nuôi ngược" qua buck, chưa rõ. Cần đo VIN khi chỉ cắm USB, trước khi cắm motor/servo ở trạng thái đó
 
 ### Quy trình kết nối (bắt buộc, rút kinh nghiệm vụ F411 hỏng lần 3)
