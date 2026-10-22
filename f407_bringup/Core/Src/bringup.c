@@ -113,14 +113,9 @@ static void i2c_scan(void)
     }
     if (!found) out("   KHONG thay thiet bi nao -> kiem tra nguon 3V3 / pull-up\r\n");
 
-    uint8_t who = 0;
-    if (HAL_I2C_Mem_Read(&hi2c2, MPU6050_ADDR << 1, MPU6050_WHO_AM_I,
-                         I2C_MEMADD_SIZE_8BIT, &who, 1, 20) == HAL_OK) {
-        out("   MPU-6050 WHO_AM_I = 0x%02X (dung = 0x68) -> %s\r\n",
-            who, who == 0x68 ? "OK" : "SAI");
-    } else {
-        out("   Doc WHO_AM_I that bai\r\n");
-    }
+    /* Board V1.2 dùng IMU QMI8658, không phải MPU-6050 như V1.1. Chưa có driver QMI8658,
+     * nên KHÔNG đọc WHO_AM_I của MPU-6050 (sẽ báo SAI gây hiểu nhầm). Xem địa chỉ quét ở trên. */
+    out("   IMU V1.2 = QMI8658, chua ho tro, bo qua doc WHO_AM_I\r\n");
 }
 
 /* ------------------------------------------------------------------ */
@@ -200,7 +195,7 @@ static void help(void)
 {
     out("\r\n===== BRING-UP Hiwonder ROS Robot Controller (F407) =====\r\n");
     out(" h : tro giup          v : bat/tat dong trang thai [ST]\r\n");
-    out(" b : bip               i : quet I2C2 + doc MPU-6050\r\n");
+    out(" b : bip               i : quet I2C2 (IMU V1.2 = QMI8658)\r\n");
     out(" s : quet servo        p : doi cuc tinh OE bo dem servo\r\n");
     out(" 1 : trai TIEN %d%%    2 : trai LUI    3 : phai TIEN   4 : phai LUI\r\n", BU_TEST_DUTY);
     out(" m : do toc do toi da (ca 2 banh %d%%)\r\n", BU_MAX_DUTY);
