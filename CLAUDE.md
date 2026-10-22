@@ -106,7 +106,7 @@ STM32_Programmer_CLI.exe -c port=SWD mode=HOTPLUG -r32 <địa chỉ> 1
 
 ## 6. Board Hiwonder "ROS Robot Controller" (STM32F407VET6) — ECU1
 
-MCU STM32F407VET6, 100 chân, Flash 512 KB, RAM 192 KB, HSE **8 MHz** → **168 MHz** (trùng target `stm32f407` chính thức của Trampoline). Có sẵn transceiver CAN VP230 + trở 120 Ω (R23, hàn cố định → ECU1 nằm ở một đầu bus).
+MCU STM32F407VET6, 100 chân, Flash 512 KB, RAM 192 KB, SYSCLK **168 MHz**. **Board V1.2 dùng thạch anh HSE 16 MHz (tụ 10 pF) và IMU QMI8658** theo tài liệu V1.2 (`reference/hiwonder_ros_controller/v1.2/`, file Schematic Explanation tr.5 và tr.10); V1.0/V1.1 dùng HSE 8 MHz và MPU-6050. ⚠️ `f407_bringup` và target `stm32f407` của Trampoline hiện đều giả định HSE 8 MHz: với thạch anh 16 MHz chúng chạy SYSCLK 336 MHz (gấp đôi giới hạn) → **KHÔNG nạp cho tới khi sửa PLL**. Có sẵn transceiver CAN VP230 + trở 120 Ω (R23, hàn cố định → ECU1 nằm ở một đầu bus).
 
 > Nội dung bên dưới chuyển nguyên văn từ `amr_ws` (viết ngày 29/9, lúc còn định lắp board lên xe). **Phần nguồn, quy trình kết nối, sơ đồ chân, rủi ro vẫn đúng.** Các dòng về motor (M1–M4, YX-4055AM), encoder, servo và "đề xuất dùng M1 + M2 cho 2 bánh sau" **không dùng cho đồ án**. Các chỗ nhắc `reference/...` là file trong thư mục `reference/` của repo này (không commit).
 
@@ -133,7 +133,7 @@ Chưa có source firmware Hiwonder cho board này.
 
 **Lý do đổi:**
 - Có sẵn CAN (VP230 trên PD0/PD1, trở đầu cuối 120 Ω), nên CAN chuyển từ "tùy chọn" thành "làm được" cho ĐATN
-- HSE 8 MHz → 168 MHz, trùng target `stm32f407` chính thức của Trampoline, gần như không cần port (bỏ được rủi ro lớn nhất của ĐATN)
+- Cùng chip với target `stm32f407` chính thức của Trampoline (168 MHz), nhưng cần đổi PLL_M cho HSE 16 MHz
 - Có cổng bus servo cấp VIN, không cần board BusLinker nữa
 
 ### Nguồn (đã đối chiếu tài liệu)
@@ -170,7 +170,7 @@ Chưa có source firmware Hiwonder cho board này.
 
 | Chức năng | Chân | Ngoại vi dự kiến | Trạng thái |
 |---|---|---|---|
-| Clock | HSE 8 MHz, 22 pF | → 168 MHz | ✔ §5 |
+| Clock | **V1.2: HSE 16 MHz, 10 pF** (V1.1: 8 MHz, 22 pF) | → 168 MHz | ⚠️ V1.2 Schematic Explanation §5 ghi 16 MHz; nhưng bài Lesson 5 và 2 file `.ioc` ví dụ trong bộ V1.2 vẫn ghi 8 MHz (PLLM = 4) → tin chữ trên thạch anh thật |
 | SWD | PA13 (SWDIO), PA14 (SWCLK); có trên H1 chân 7/3 | — | ✔ §10, §11 |
 | Cổng USB số 4 "serial 2" (CH9102F U3) | PD8, PD9 | USART3 (PD8=TX, PD9=RX) | ✔ S2 "串口3电路". Là cổng số 4 **suy ra bằng loại trừ** (cổng số 7 là USART1, xem dòng dưới) → vẫn xác nhận nhanh bằng firmware echo |
 | Cổng USB số 7 "serial 1/download" (CH9102F U13) | PA9 (TX), PA10 (RX) | USART1 + mạch tự nạp: DTR/RTS → Q5 SS8050/Q6 SS8550/D5 1N4148 → NRST và BOOT0 | ✔ S2 "串口1/下载接口电路". Nạp bằng **bootloader ROM qua USART1** (mạch tự kéo BOOT0 + reset). PA9/PA10 **không** dính motor |
@@ -186,7 +186,7 @@ Chưa có source firmware Hiwonder cho board này.
 | Header motor (6 chân, HDR 2.0 mm) | M_B, GND, A, B, 5V, M_F (thứ tự đọc từ ảnh) | — | ✔ S3 có đủ các net này. ❓ Thứ tự chân chính xác cần đối chiếu board thật trước khi làm dây cho JGB37-520 |
 | Nguồn encoder | **5 V** trên header | — | ✔ S3. ⚠️ Tín hiệu A/B lên tới 5 V (khác lựa chọn 3.3 V trên F411) → tra cột "FT" trong datasheet F407 (DS8626) cho 8 chân encoder |
 | CAN1 | PD0 (RX) / PD1 (TX) | CAN1, transceiver VP230, R23 = 120 Ω hàn cố định | ✔ §16 |
-| IMU MPU-6050 | PB10 (SCL) / PB11 (SDA), INT = PB12 | I2C2, pull-up 10 kΩ trên board | ✔ §13 |
+| IMU (**V1.2: QMI8658**; V1.1: MPU-6050) | PB10 (SCL) / PB11 (SDA), INT = PB12 | I2C2, pull-up 10 kΩ trên board | ✔ §13. V1.2 Schematic Explanation §13 ghi QMI8658 trên cùng PB10/PB11. ❓ Địa chỉ I2C của QMI8658 trên board chưa xác nhận (lệnh `i` trong bring-up sẽ quét); `bringup.c` đang đọc WHO_AM_I của MPU-6050 nên sẽ báo SAI trên V1.2 |
 | Cổng I2C mở rộng (số 5) | 5V, GND, SDA, SCL (chung bus I2C2) | — | ✔ §9. Có thể gắn BNO055 ở đây (địa chỉ 0x28/0x29, không trùng MPU 0x68) — cổng cấp **5 V**, kiểm tra module chịu được |
 | Bus servo | TX_EN = **PE7**, RX_EN = **PE8**, TX = **PC6**, RX = **PC7** | USART6 + buffer SN74LVC2G125 (U14), SERVO_SIGNAL kéo lên 5 V qua R14 1 kΩ | ✔ S3. ⚠️ Explanation §24 ghi "PG6_TX" là lỗi đánh máy: F407VET6 bản 100 chân **không có port G** → PC6. Chân OE của 74LVC2G125 theo datasheet TI là **tích cực mức THẤP** → TX_EN/RX_EN = 0 là bật; xác nhận khi viết `servo_buslinker.c`. ❓ P6 chắc chắn có VIN; P7 nhiều khả năng cũng VIN (đọc ảnh chưa chắc) → **đo trước khi cắm HTS-20H** (servo cần 9.6–12.6 V) |
 | Servo PWM | J1 = PA11 (5V), J2 = PA12 (5V), J4 = PC8 (VIN), J5 = PC9 (VIN) | — | ✔ S2 (PA11 chỉ là servo J1, không dính motor) |
