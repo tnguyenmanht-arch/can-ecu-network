@@ -45,14 +45,15 @@ Chi tiết kiến trúc, nguyên tắc module, dải ID, CAN matrix, cách đấ
 
 ## 3. Trạng thái (cập nhật thủ công)
 
-**22/10/2026 — GĐ 2 xong (22/10); GĐ 4 (driver bxCAN loopback) xong trên F103 Yahboom (21/10); board Hiwonder đã về, chưa nạp.**
+**22/10/2026 — GĐ 2 xong (22/10); GĐ 4 (driver bxCAN loopback) xong trên F103 Yahboom (21/10); bring-up Hiwonder V1.2 xong (22/10).**
 - ✅ GĐ 4: driver bxCAN + `clock_init` 72 MHz chạy đạt ở chế độ loopback trên board Yahboom YB-MSV01 (STM32F103C8 chính hãng), 21/10. Kết quả và lệnh nạp/đọc: `tests/target/bxcan_loopback/README.md`
 - ✅ GĐ 2 (hiểu Trampoline qua code) xong, 22/10
 - ✅ DBC nháp 0.2 (`can/vehicle.dbc`, 5/10): 6 message. Thêm khoá cửa trung tâm: `LockStatus` 0x310 (ECU3 → Jetson), `LockCommand` 0x500 (Jetson → ECU3, gửi theo sự kiện; gateway chỉ được gửi dải 0x500–0x5FF), và `GearActual` trong 0x100. Kiểm bằng cantools `strict=True`: hợp lệ. Tải bus lý thuyết ở 500 kbit/s: **3,3 %** theo chu kỳ (122 khung/s), **5,5 %** xấu nhất (`BodyStatus`, `LockStatus` gửi theo sự kiện tối đa 50 khung/s)
 - ✅ Tài liệu kiến trúc; cấu trúc repo và 4 quyết định thiết kế **đã chốt** (mục 7 của tài liệu kiến trúc): repo riêng + Trampoline qua fork/submodule; commit `gen/`; RTE sinh thẳng từ DBC; một driver bxCAN mức thanh ghi dùng chung
 - ✅ Trampoline + goil build được trên Windows, đã vá hard-float + `USEFLOAT`; `tests/target/fpu_check` build đạt (chưa nạp). Xem `docs/trampoline-setup.md`
 - ✅ `f407_bringup/`: firmware kiểm tra board Hiwonder khi hàng về (port từ xe, giữ K1 khi reset để vào chế độ bring-up). **Tên project CubeIDE vẫn là `amr_stm32f407`.** Checklist: `docs/bringup-f407.md`
-- ✅ Board Hiwonder đã về (silkscreen **V1.2**), 22/10. `f407_bringup` build headless đạt (0 lỗi, 0 cảnh báo), chưa nạp
+- ✅ Board Hiwonder đã về (silkscreen **V1.2**), 22/10. Bring-up xong 22/10 (`f407_bringup` bản HSE 16 MHz, nạp qua cổng serial): clock, LED, buzzer, K1/K2, PD3, I2C2 (QMI8658 @ 0x6A) đạt; USART3 (cổng số 4) chưa thử. Kết quả: `docs/bringup-f407.md`
+- ⚠️ **ST-Link không được laptop nhận** ("No debug probe detected", 22/10; hôm 21/10 vẫn dùng được với F103). Cần kiểm tra (cáp, cổng USB, driver) hoặc mua mới. Không có ST-Link thì không debug, không đọc RAM (HOTPLUG/DWT) được
 - ⏳ Cần mua: 4× SN65HVD230, 1× F103C8T6, dây xoắn đôi. Hiwonder có sẵn VP230 + R23 120 Ω nên ECU1 nằm ở một đầu bus, không cần SN65HVD230 cho ECU1
 - 📝 Đề cương mới (Claude Doc, 1/10, chờ GVHD duyệt): https://claude.ai/code/artifact/af6e2b14-e170-4eb3-9d70-5dee7526f16d. Bản cũ 28/9 (`reference/ĐA/DAKS...pdf`) viết theo xe AMR, không dùng nữa. Đề xuất ĐACN (1/10): `reference/ĐA/Đề xuất ĐACN — HMI cụm đồng hồ trên Android.pdf`, chốt gói JSON Jetson → app qua WebSocket và ngưỡng cửa mở 3 km/h dùng chung với buzzer VCU
 - Tài liệu lý thuyết core: chuẩn OSEK OS 2.2.3 (`reference/osek/os223.pdf`), Trampoline Handbook (`third_party/trampoline/documentation/manual/main.pdf`), 2 bảng tra `documentation/qrdc/`. **Từ hướng mới, COM nằm trong phạm vi**: `reference/osek/OSEKCOM303.pdf` (OSEK COM) và chuẩn AUTOSAR SWS COM
@@ -84,6 +85,18 @@ python -c "import cantools; db=cantools.database.load_file('can/vehicle.dbc', st
 
 # Đọc thanh ghi khi board đang chạy: BẮT BUỘC mode=HOTPLUG (mode mặc định tự halt core, đọc ra toàn 0 giả)
 STM32_Programmer_CLI.exe -c port=SWD mode=HOTPLUG -r32 <địa chỉ> 1
+
+# Nạp Hiwonder qua cổng download (cổng USB số 7, CH9102, USART1, ví dụ COM16) khi không có ST-Link — CHỈ khi user đã xác nhận
+# 1) Tạo .bin từ ELF (objcopy đi kèm CubeIDE)
+arm-none-eabi-objcopy -O binary f407_bringup/Debug/amr_stm32f407.elf f407_bringup/Debug/amr_stm32f407.bin
+# 2) Xoá + ghi + verify; -R -B là cực tính đúng cho mạch tự nạp Hiwonder (mặc định KHÔNG vào được bootloader).
+#    Cuối lệnh stm32loader tự kéo BOOT0 thấp rồi reset -> chip chạy chương trình từ Flash
+python -m stm32loader -p COM16 -f F4 -R -B -e -w -v -a 0x08000000 f407_bringup/Debug/amr_stm32f407.bin
+#    Chỉ đọc ID chip (không ghi): python -m stm32loader -p COM16 -f F4 -R -B   -> mong đợi 0x413
+
+# Mở terminal AN TOÀN trên cổng download: giữ DTR=1 (không reset), RTS=0 (BOOT0 thấp).
+# Thiếu 2 cờ này thì bấm reset có thể vào bootloader thay vì chạy chương trình
+python -m serial.tools.miniterm --dtr 1 --rts 0 COM16 115200
 ```
 
 - CubeMX 6.16.1 bản rời chạy dòng lệnh: `%LOCALAPPDATA%\Programs\STM32CubeMX\jre\bin\java.exe -jar STM32CubeMX.exe -q script.txt` (script: `config load <ioc>` / `project generate` / `exit`). ⚠️ Gọi thẳng `STM32CubeMX.exe -q` sẽ tách tiến trình và treo chờ hộp thoại
@@ -106,7 +119,7 @@ STM32_Programmer_CLI.exe -c port=SWD mode=HOTPLUG -r32 <địa chỉ> 1
 
 ## 6. Board Hiwonder "ROS Robot Controller" (STM32F407VET6) — ECU1
 
-MCU STM32F407VET6, 100 chân, Flash 512 KB, RAM 192 KB, SYSCLK **168 MHz**. **Board V1.2 dùng thạch anh HSE 16 MHz (tụ 10 pF) và IMU QMI8658** theo tài liệu V1.2 (`reference/hiwonder_ros_controller/v1.2/`, file Schematic Explanation tr.5 và tr.10); V1.0/V1.1 dùng HSE 8 MHz và MPU-6050. ⚠️ `f407_bringup` và target `stm32f407` của Trampoline hiện đều giả định HSE 8 MHz: với thạch anh 16 MHz chúng chạy SYSCLK 336 MHz (gấp đôi giới hạn) → **KHÔNG nạp cho tới khi sửa PLL**. Có sẵn transceiver CAN VP230 + trở 120 Ω (R23, hàn cố định → ECU1 nằm ở một đầu bus).
+MCU STM32F407VET6, 100 chân, Flash 512 KB, RAM 192 KB, SYSCLK **168 MHz**. **Board V1.2 dùng thạch anh HSE 16 MHz (tụ 10 pF) và IMU QMI8658** theo tài liệu V1.2 (`reference/hiwonder_ros_controller/v1.2/`, file Schematic Explanation tr.5 và tr.10); V1.0/V1.1 dùng HSE 8 MHz và MPU-6050. **HSE 16 MHz đã xác nhận trên board (22/10).** `f407_bringup` đã sửa cho 16 MHz (PLLM 16, commit `ba6591e`). ⚠️ Target `stm32f407` của Trampoline vẫn giả định HSE 8 MHz (`stm32f4xx_conf.h:29`): với thạch anh 16 MHz sẽ chạy SYSCLK 336 MHz (gấp đôi giới hạn) → **KHÔNG nạp app Trampoline cho tới khi sửa**. Có sẵn transceiver CAN VP230 + trở 120 Ω (R23, hàn cố định → ECU1 nằm ở một đầu bus).
 
 > Nội dung bên dưới chuyển nguyên văn từ `amr_ws` (viết ngày 29/9, lúc còn định lắp board lên xe). **Phần nguồn, quy trình kết nối, sơ đồ chân, rủi ro vẫn đúng.** Các dòng về motor (M1–M4, YX-4055AM), encoder, servo và "đề xuất dùng M1 + M2 cho 2 bánh sau" **không dùng cho đồ án**. Các chỗ nhắc `reference/...` là file trong thư mục `reference/` của repo này (không commit).
 
@@ -146,7 +159,7 @@ Chưa có source firmware Hiwonder cho board này.
   - Thêm cầu chì ~5 A trên dây từ pin vào terminal 21
   - Jetson dùng nguồn riêng (19 V) như hiện tại. **KHÔNG** lấy nguồn Jetson từ cổng 5V 5A (số 2)
 - **Mặt sau board ghi V1.0**: theo Hardware Intro FAQ 4, trên V1.0 hai chân **VREF+ và VDDA phải được nối** (bản V1.0 xuất xưởng đã có cầu nối này). Chỉ ảnh hưởng việc đọc điện áp pin qua ADC. Nếu là V1.0 mà không thấy cầu nối thì hàn nối; V1.1 không cần. **Không áp dụng cho V1.2** (board thật)
-- ⚠️ **CẦN ĐO trước khi dùng**: cả 2 cổng USB-C đều đưa VBUS vào rail 5V qua diode 1N5819 (§12, §14). Khi tắt công tắc 20 mà cắm USB, **toàn bộ rail 5V** (encoder, servo 5V, buzzer, MPU) chạy bằng nguồn USB của laptop. Rail VIN có thể bị "nuôi ngược" qua buck, chưa rõ. Cần đo VIN khi chỉ cắm USB, trước khi cắm motor/servo ở trạng thái đó
+- ⚠️ **Đã đo (22/10, V1.2): rail VIN BỊ nuôi ngược ~4,2 V khi chỉ cắm USB** (công tắc 20 OFF, không pin; đọc bằng ADC PB0 của firmware bring-up, chưa đối chiếu đồng hồ). Cả 2 cổng USB-C đưa VBUS vào rail 5V qua diode 1N5819 (§12, §14), nên rail 5V và cả VIN đều có điện từ laptop. **Quy tắc: KHÔNG cắm motor/servo khi chỉ có USB**
 
 ### Quy trình kết nối (bắt buộc, rút kinh nghiệm vụ F411 hỏng lần 3)
 | Việc | Cổng | Trạng thái nguồn |
@@ -170,7 +183,7 @@ Chưa có source firmware Hiwonder cho board này.
 
 | Chức năng | Chân | Ngoại vi dự kiến | Trạng thái |
 |---|---|---|---|
-| Clock | **V1.2: HSE 16 MHz, 10 pF** (V1.1: 8 MHz, 22 pF) | → 168 MHz | ⚠️ V1.2 Schematic Explanation §5 ghi 16 MHz; nhưng bài Lesson 5 và 2 file `.ioc` ví dụ trong bộ V1.2 vẫn ghi 8 MHz (PLLM = 4) → tin chữ trên thạch anh thật |
+| Clock | **V1.2: HSE 16 MHz, 10 pF** (V1.1: 8 MHz, 22 pF) | → 168 MHz (PLLM 16, N 336, P 2, Q 7) | ✔ **Đã xác nhận trên board 22/10**: firmware cấu hình HSE 16 MHz, UART 115200 ra chữ rõ. (Bài Lesson 5 và 2 file `.ioc` ví dụ trong bộ V1.2 ghi 8 MHz là sai với board này) |
 | SWD | PA13 (SWDIO), PA14 (SWCLK); có trên H1 chân 7/3 | — | ✔ §10, §11 |
 | Cổng USB số 4 "serial 2" (CH9102F U3) | PD8, PD9 | USART3 (PD8=TX, PD9=RX) | ✔ S2 "串口3电路". Là cổng số 4 **suy ra bằng loại trừ** (cổng số 7 là USART1, xem dòng dưới) → vẫn xác nhận nhanh bằng firmware echo |
 | Cổng USB số 7 "serial 1/download" (CH9102F U13) | PA9 (TX), PA10 (RX) | USART1 + mạch tự nạp: DTR/RTS → Q5 SS8050/Q6 SS8550/D5 1N4148 → NRST và BOOT0 | ✔ S2 "串口1/下载接口电路". Nạp bằng **bootloader ROM qua USART1** (mạch tự kéo BOOT0 + reset). PA9/PA10 **không** dính motor |
@@ -186,7 +199,7 @@ Chưa có source firmware Hiwonder cho board này.
 | Header motor (6 chân, HDR 2.0 mm) | M_B, GND, A, B, 5V, M_F (thứ tự đọc từ ảnh) | — | ✔ S3 có đủ các net này. ❓ Thứ tự chân chính xác cần đối chiếu board thật trước khi làm dây cho JGB37-520 |
 | Nguồn encoder | **5 V** trên header | — | ✔ S3. ⚠️ Tín hiệu A/B lên tới 5 V (khác lựa chọn 3.3 V trên F411) → tra cột "FT" trong datasheet F407 (DS8626) cho 8 chân encoder |
 | CAN1 | PD0 (RX) / PD1 (TX) | CAN1, transceiver VP230, R23 = 120 Ω hàn cố định | ✔ §16 |
-| IMU (**V1.2: QMI8658**; V1.1: MPU-6050) | PB10 (SCL) / PB11 (SDA), INT = PB12 | I2C2, pull-up 10 kΩ trên board | ✔ §13. V1.2 Schematic Explanation §13 ghi QMI8658 trên cùng PB10/PB11. ❓ Địa chỉ I2C của QMI8658 trên board chưa xác nhận (lệnh `i` trong bring-up sẽ quét); `bringup.c` đang đọc WHO_AM_I của MPU-6050 nên sẽ báo SAI trên V1.2 |
+| IMU (**V1.2: QMI8658**; V1.1: MPU-6050) | PB10 (SCL) / PB11 (SDA), INT = PB12 | I2C2, pull-up 10 kΩ trên board | ✔ §13. ✔ **Bring-up 22/10: quét I2C2 thấy 0x6A (QMI8658)**. Chưa có driver QMI8658; `bringup.c` chỉ in "chua ho tro" |
 | Cổng I2C mở rộng (số 5) | 5V, GND, SDA, SCL (chung bus I2C2) | — | ✔ §9. Có thể gắn BNO055 ở đây (địa chỉ 0x28/0x29, không trùng MPU 0x68) — cổng cấp **5 V**, kiểm tra module chịu được |
 | Bus servo | TX_EN = **PE7**, RX_EN = **PE8**, TX = **PC6**, RX = **PC7** | USART6 + buffer SN74LVC2G125 (U14), SERVO_SIGNAL kéo lên 5 V qua R14 1 kΩ | ✔ S3. ⚠️ Explanation §24 ghi "PG6_TX" là lỗi đánh máy: F407VET6 bản 100 chân **không có port G** → PC6. Chân OE của 74LVC2G125 theo datasheet TI là **tích cực mức THẤP** → TX_EN/RX_EN = 0 là bật; xác nhận khi viết `servo_buslinker.c`. ❓ P6 chắc chắn có VIN; P7 nhiều khả năng cũng VIN (đọc ảnh chưa chắc) → **đo trước khi cắm HTS-20H** (servo cần 9.6–12.6 V) |
 | Servo PWM | J1 = PA11 (5V), J2 = PA12 (5V), J4 = PC8 (VIN), J5 = PC9 (VIN) | — | ✔ S2 (PA11 chỉ là servo J1, không dính motor) |
@@ -195,7 +208,7 @@ Chưa có source firmware Hiwonder cho board này.
 | Đo điện áp pin | PB0 | ADC1_IN8, cầu chia 1/11 | ✔ S3 |
 | MPU-6050 AD0 | kéo xuống GND qua R19 10 kΩ | → địa chỉ I2C **0x68** | ✔ S2 |
 | Nút bấm K1/K2 | PE1 / PE0, kéo lên 10 kΩ, nhấn = mức THẤP | GPIO | ✔ §6 |
-| Công tắc enable (số 1) | PD3, kéo lên 10 kΩ, gạt về GND | GPIO input | ✔ §18. ⚠️ **Chỉ là đầu vào GPIO, không cắt nguồn motor bằng phần cứng.** Firmware tự viết phải tự đọc PD3. Nếu dùng làm e-stop thì phải đặt NGOÀI vòng PID (cùng nguyên tắc "lệnh dừng không phụ thuộc cảm biến") |
+| Công tắc enable (số 1) | PD3, kéo lên 10 kΩ, gạt về GND | GPIO input | ✔ §18. ✔ Bring-up 22/10: PD3 = 0 khi gạt về phía ____ (cần điền). ⚠️ **Chỉ là đầu vào GPIO, không cắt nguồn motor bằng phần cứng.** Firmware tự viết phải tự đọc PD3. Nếu dùng làm e-stop thì phải đặt NGOÀI vòng PID (cùng nguyên tắc "lệnh dừng không phụ thuộc cảm biến") |
 | SBUS | PD2 (qua transistor đảo) | UART5_RX | ✔ §15 |
 | Bluetooth | PD5 / PD6 | USART2 | ✔ §8 |
 | OLED | PB13, PC3, PD11–PD14 | — | ✔ §7 |

@@ -15,6 +15,26 @@ chỉ một máy nối vào board · motor chỉ quay khi đã nhấc bánh kh�
 Đọc serial trên Windows (pyserial có sẵn):
 `python -m serial.tools.miniterm COMx 115200` (thoát bằng Ctrl+]).
 
+## Kết quả V1.2 ngày 22/10/2026
+
+Board silkscreen **V1.2**. Firmware `f407_bringup` bản HSE 16 MHz (commit `ba6591e`, nhánh `fix/f407-bringup-hse16`). Xong lúc 23:35. Chỉ cắm USB, công tắc 20 OFF, không pin/motor/servo/Jetson.
+
+| Mục | Kết quả |
+|---|---|
+| A1 Silkscreen | V1.2 |
+| B3 Nạp | Qua cổng download **COM16** (CH9102, USART1) bằng `stm32loader -R -B` (lệnh đầy đủ ở `CLAUDE.md` mục 4). ST-Link chưa được laptop nhận ("No debug probe detected"). Chip ID **0x413**, Flash 512 KiB, verify OK |
+| Clock | UART 115200 ra chữ rõ → **HSE 16 MHz đúng** |
+| Vào bring-up | Giữ K1 khi reset: 3 tiếng bíp ✅ |
+| B4 LED PE10 | ✅ |
+| C4 Buzzer PA8 | ✅ |
+| C3 K1 (PE1), K2 (PE0) | Về 0 khi nhấn ✅ |
+| C2 Công tắc PD3 | = 0 khi gạt về phía ____ (cần điền) |
+| C5 I2C2 | Thấy thiết bị **0x6A** (QMI8658) ✅ |
+| B2 VIN khi chỉ có USB | `VBAT` đọc **~4,20 V** (công tắc 20 OFF, không pin) → rail VIN **bị nuôi ngược** từ USB. Không cắm motor/servo khi chỉ có USB. (Đọc bằng ADC PB0 của firmware, chưa đối chiếu đồng hồ) |
+| C1, B5 USART3 (cổng số 4) | Chưa thử |
+
+Mở terminal trên cổng download phải dùng `--dtr 1 --rts 0` (xem `CLAUDE.md` mục 4), nếu không bấm reset có thể vào bootloader.
+
 ## A. Chưa cấp pin, chưa nạp code
 
 | # | Việc | Kỳ vọng | Kết quả |
@@ -46,7 +66,7 @@ chỉ một máy nối vào board · motor chỉ quay khi đã nhấc bánh kh�
 | C2 | Gạt công tắc số 1 (enable) hai phía, xem `PD3(EN_SW)=` | Đổi 0 ↔ 1. Ghi: **phía nào = 0** | |
 | C3 | Bấm K1/K2, xem `K1=`/`K2=` | 1 → 0 khi nhấn | |
 | C4 | Gõ `b` | Bíp (xác nhận buzzer ở **PA8**) | |
-| C5 | Gõ `i` | Thấy 0x68, `WHO_AM_I = 0x68 -> OK` | |
+| C5 | Gõ `i` | **V1.2:** thấy 0x6A (QMI8658) và dòng `IMU V1.2 = QMI8658, chua ho tro, bo qua doc WHO_AM_I`. (V1.0/V1.1: 0x68, MPU-6050) | |
 | C6 | Cắm motor (vẫn chưa bật pin). **Xoay tay** bánh trái theo chiều **TIẾN**, xem `ENC L(TIM5)` | Số thay đổi. Ghi: **tăng hay giảm** | |
 | C7 | Tương tự bánh phải, xem `ENC R(TIM2)` | Ghi: **tăng hay giảm** | |
 
