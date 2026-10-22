@@ -45,12 +45,15 @@ Chi tiết kiến trúc, nguyên tắc module, dải ID, CAN matrix, cách đấ
 
 ## 3. Trạng thái (cập nhật thủ công)
 
-**30/9/2026 — chưa có firmware mạng CAN, chưa nạp gì.**
+**22/10/2026 — GĐ 2 xong (22/10); GĐ 4 (driver bxCAN loopback) xong trên F103 Yahboom (21/10); board Hiwonder đã về, chưa nạp.**
+- ✅ GĐ 4: driver bxCAN + `clock_init` 72 MHz chạy đạt ở chế độ loopback trên board Yahboom YB-MSV01 (STM32F103C8 chính hãng), 21/10. Kết quả và lệnh nạp/đọc: `tests/target/bxcan_loopback/README.md`
+- ✅ GĐ 2 (hiểu Trampoline qua code) xong, 22/10
 - ✅ DBC nháp 0.2 (`can/vehicle.dbc`, 5/10): 6 message. Thêm khoá cửa trung tâm: `LockStatus` 0x310 (ECU3 → Jetson), `LockCommand` 0x500 (Jetson → ECU3, gửi theo sự kiện; gateway chỉ được gửi dải 0x500–0x5FF), và `GearActual` trong 0x100. Kiểm bằng cantools `strict=True`: hợp lệ. Tải bus lý thuyết ở 500 kbit/s: **3,3 %** theo chu kỳ (122 khung/s), **5,5 %** xấu nhất (`BodyStatus`, `LockStatus` gửi theo sự kiện tối đa 50 khung/s)
 - ✅ Tài liệu kiến trúc; cấu trúc repo và 4 quyết định thiết kế **đã chốt** (mục 7 của tài liệu kiến trúc): repo riêng + Trampoline qua fork/submodule; commit `gen/`; RTE sinh thẳng từ DBC; một driver bxCAN mức thanh ghi dùng chung
 - ✅ Trampoline + goil build được trên Windows, đã vá hard-float + `USEFLOAT`; `tests/target/fpu_check` build đạt (chưa nạp). Xem `docs/trampoline-setup.md`
 - ✅ `f407_bringup/`: firmware kiểm tra board Hiwonder khi hàng về (port từ xe, giữ K1 khi reset để vào chế độ bring-up). **Tên project CubeIDE vẫn là `amr_stm32f407`.** Checklist: `docs/bringup-f407.md`
-- ⏳ Board Hiwonder chưa về. Cần mua thêm: 1× F103C8T6 (đã có 1), 3× SN65HVD230, dây xoắn đôi
+- ✅ Board Hiwonder đã về (silkscreen **V1.2**), 22/10. `f407_bringup` build headless đạt (0 lỗi, 0 cảnh báo), chưa nạp
+- ⏳ Cần mua: 4× SN65HVD230, 1× F103C8T6. Hiwonder có sẵn VP230 + R23 120 Ω nên ECU1 nằm ở một đầu bus, không cần SN65HVD230 cho ECU1
 - 📝 Đề cương mới (Claude Doc, 1/10, chờ GVHD duyệt): https://claude.ai/code/artifact/af6e2b14-e170-4eb3-9d70-5dee7526f16d. Bản cũ 28/9 (`reference/ĐA/DAKS...pdf`) viết theo xe AMR, không dùng nữa. Đề xuất ĐACN (1/10): `reference/ĐA/Đề xuất ĐACN — HMI cụm đồng hồ trên Android.pdf`, chốt gói JSON Jetson → app qua WebSocket và ngưỡng cửa mở 3 km/h dùng chung với buzzer VCU
 - Tài liệu lý thuyết core: chuẩn OSEK OS 2.2.3 (`reference/osek/os223.pdf`), Trampoline Handbook (`third_party/trampoline/documentation/manual/main.pdf`), 2 bảng tra `documentation/qrdc/`. **Từ hướng mới, COM nằm trong phạm vi**: `reference/osek/OSEKCOM303.pdf` (OSEK COM) và chuẩn AUTOSAR SWS COM
 
@@ -112,7 +115,9 @@ Tài liệu gốc (đã đọc 2026-09-29):
 - `reference/hiwonder_ros_controller/2. ROS Robot Controller Schematic Explanation.pdf`: § = mục trong file này
 - ⭐ **`reference/hiwonder_ros_controller/Ros Robot ControllerV1.1.pdf`**: schematic đầy đủ 3 trang (S1 = MCU/ngoại vi, S2 = CH9102/MPU/CAN/servo, S3 = nguồn/driver/encoder/bus servo), bản V1.1 ngày 2023.03.12. **Khi schematic và file Explanation mâu thuẫn thì tin schematic** (Explanation có ít nhất 3 lỗi, ghi ở bảng dưới)
 
-Chưa có source firmware Hiwonder cho board này. Board thật có thể là V1.0, cần xem silkscreen mặt sau.
+> ⚠️ **Board thật là V1.2 (22/10/2026), schematic V1.1 chỉ để tham khảo, bảng chân cần xác nhận qua bring-up.** Chưa có schematic V1.2.
+
+Chưa có source firmware Hiwonder cho board này.
 
 **Không trùng board MiniROS Controller** (kế hoạch cũ, đã tạm dừng). Cùng hãng, cùng họ MCU, nhưng là 2 board khác nhau:
 
