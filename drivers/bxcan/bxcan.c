@@ -9,15 +9,13 @@
  *   - can_receive   : nhả FIFO bằng "=" (RF0R có bit rc_w1, "|=" sẽ xoá nhầm cờ FOVR/FULL)
  *   - Can_Init      : tên macro RCC_APB2ENR_..., RCC_APB1ENR_..., remap bằng macro REMAP2
  *
- * Cấu hình hiện tại: 500 kbps với APB1 = 36 MHz, chế độ LOOPBACK (LBKM = 1).
- * Chân: PB8 = CAN_RX, PB9 = CAN_TX (remap).
- *
- * TODO:
- *   - Can_Init đang cố định chân PB8/PB9 (remap) và BTR cho APB1 = 36 MHz, chế độ loopback (LBKM = 1).
- *   - Khi ra bus thật: bỏ LBKM (bit 30 của BTR).
- *   - Khi dùng cho F407: tính lại BTR (APB1 = 42 MHz) và chân (PD0/PD1, AF9).
+ * File này dùng chung cho F103 và F407: chỉ chạm thanh ghi CAN1->...
+ * Phần riêng chip (clock, chân, remap) nằm ở drivers/mcu/<chip>/can_port_<chip>.c,
+ * header chip lấy qua can_port.h (chọn bằng include path -I drivers/mcu/<chip>).
+ * Giá trị BTR do nơi gọi truyền vào Can_Init (phụ thuộc APB1 và có/không LBKM):
+ *   F103, APB1 = 36 MHz, loopback: 0x40050008. Khi ra bus thật: bỏ LBKM (bit 30).
  */
-#include "stm32f1xx.h"
+#include "can_port.h"
 #include "bxcan.h"
 
 /* ===== Bài 10: vào chế độ init ===== */
@@ -148,26 +146,16 @@ uint8_t can_receive(uint16_t *id, uint8_t *data, uint8_t *dlc)
 }
 
 /* ===== Bài 13: khởi tạo toàn bộ ===== */
-uint8_t Can_Init(void)
+uint8_t Can_Init(uint32_t btr)
 {
-    /* ① Bật clock */
-    RCC->APB2ENR |= RCC_APB2ENR_IOPBEN | RCC_APB2ENR_AFIOEN;   /* GPIOB, AFIO */
-    RCC->APB1ENR |= RCC_APB1ENR_CAN1EN;                        /* CAN1 */
-
-    /* ② Remap CAN1 -> PB8/PB9: xoá trường CAN_REMAP rồi đặt = 10 (nhị phân) */
-    AFIO->MAPR &= ~AFIO_MAPR_CAN_REMAP;
-    AFIO->MAPR |= AFIO_MAPR_CAN_REMAP_REMAP2;                  /* = (0x2U << 13) */
-
-    /* ③ Chân: PB8 = input pull-up (0x8), PB9 = AF push-pull 50 MHz (0xB) */
-    GPIOB->CRH &= ~(0xFFU << 0);                               /* xoá 8 bit của PB8, PB9 */
-    GPIOB->CRH |= (0x8U << 0) | (0xBU << 4);
-    GPIOB->ODR |= (1U << 8);                                   /* pull-up cho PB8 */
+    /* ①②③ Clock, remap, chân: riêng từng chip (can_port_<chip>.c) */
+    can_port_init();
 
     /* ④ Vào init */
     if (can_enter_init() != 0) { return 1; }
 
-    /* ⑤ Bit timing: BRP=8, TS1=5, TS2=0, SJW=0, LBKM=1 -> 0x40050008 */
-    CAN1->BTR = (0U << 24) | (0U << 20) | (5U << 16) | 8U | (1U << 30);
+    /* ⑤ Bit timing: giá trị do nơi gọi tính theo APB1 của chip */
+    CAN1->BTR = btr;
 
     /* ⑥ Bộ lọc */
     can_filter_accept_all();

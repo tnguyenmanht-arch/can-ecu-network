@@ -18,7 +18,8 @@
 /* Số vòng chờ tối đa khi đợi phần cứng (vào/thoát init) */
 #define CAN_INIT_TIMEOUT 10000U
 
-uint8_t Can_Init(void);
+/* btr: giá trị ghi thẳng vào CAN1->BTR (tính theo APB1 của chip, bit 30 = LBKM) */
+uint8_t Can_Init(uint32_t btr);
 
 uint8_t can_enter_init(void);
 uint8_t can_exit_init(void);

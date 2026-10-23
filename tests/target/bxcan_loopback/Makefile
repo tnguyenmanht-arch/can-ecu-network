@@ -6,7 +6,8 @@ REPO_ROOT := ../../..
 TARGET    := bxcan_loopback
 
 SRCS := main.c \
-        $(REPO_ROOT)/drivers/bxcan/bxcan.c
+        $(REPO_ROOT)/drivers/bxcan/bxcan.c \
+        $(REPO_ROOT)/drivers/mcu/stm32f103/can_port_f103.c
 
 INCS := -I$(REPO_ROOT)/drivers/bxcan
 

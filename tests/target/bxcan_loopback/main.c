@@ -71,7 +71,7 @@ int main(void)
     SystemCoreClockUpdate();                   /* SystemCoreClock = tần số CPU (Hz) */
     SysTick_Config(SystemCoreClock / 1000U);   /* chia 1000 = số nhịp trong 1 ms → ngắt mỗi 1 ms */
 
-    g_init_err = Can_Init();
+    g_init_err = Can_Init(0x40050008U);   /* BRP=8, TS1=5, TS2=0, SJW=0, LBKM=1 (APB1 = 36 MHz) */
     if (g_init_err != 0)
     {
         while (1) { }                          /* dừng lại để đọc mã lỗi */
