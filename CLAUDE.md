@@ -208,7 +208,7 @@ Chưa có source firmware Hiwonder cho board này.
 | Đo điện áp pin | PB0 | ADC1_IN8, cầu chia 1/11 | ✔ S3 |
 | MPU-6050 AD0 | kéo xuống GND qua R19 10 kΩ | → địa chỉ I2C **0x68** | ✔ S2 |
 | Nút bấm K1/K2 | PE1 / PE0, kéo lên 10 kΩ, nhấn = mức THẤP | GPIO | ✔ §6 |
-| Công tắc enable (số 1) | PD3, kéo lên 10 kΩ, gạt về GND | GPIO input | ✔ §18. ✔ Bring-up 22/10: PD3 = 0 khi gạt về phía ____ (cần điền). ⚠️ **Chỉ là đầu vào GPIO, không cắt nguồn motor bằng phần cứng.** Firmware tự viết phải tự đọc PD3. Nếu dùng làm e-stop thì phải đặt NGOÀI vòng PID (cùng nguyên tắc "lệnh dừng không phụ thuộc cảm biến") |
+| Công tắc enable (số 1) | PD3, kéo lên 10 kΩ, gạt về GND | GPIO input | ✔ §18. ✔ Bring-up 22/10: PD3 = 0 khi gạt công tắc số 1 về phía cổng USB-C (vị trí ON) — tích cực mức thấp. ⚠️ **Chỉ là đầu vào GPIO, không cắt nguồn motor bằng phần cứng.** Firmware tự viết phải tự đọc PD3. Nếu dùng làm e-stop thì phải đặt NGOÀI vòng PID (cùng nguyên tắc "lệnh dừng không phụ thuộc cảm biến") |
 | SBUS | PD2 (qua transistor đảo) | UART5_RX | ✔ §15 |
 | Bluetooth | PD5 / PD6 | USART2 | ✔ §8 |
 | OLED | PB13, PC3, PD11–PD14 | — | ✔ §7 |

@@ -28,7 +28,7 @@ Board silkscreen **V1.2**. Firmware `f407_bringup` bản HSE 16 MHz (commit `ba6
 | B4 LED PE10 | ✅ |
 | C4 Buzzer PA8 | ✅ |
 | C3 K1 (PE1), K2 (PE0) | Về 0 khi nhấn ✅ |
-| C2 Công tắc PD3 | = 0 khi gạt về phía ____ (cần điền) |
+| C2 Công tắc PD3 | = 0 khi gạt công tắc số 1 về phía cổng USB-C (vị trí ON) — tích cực mức thấp ✅ |
 | C5 I2C2 | Thấy thiết bị **0x6A** (QMI8658) ✅ |
 | B2 VIN khi chỉ có USB | `VBAT` đọc **~4,20 V** (công tắc 20 OFF, không pin) → rail VIN **bị nuôi ngược** từ USB. Không cắm motor/servo khi chỉ có USB. (Đọc bằng ADC PB0 của firmware, chưa đối chiếu đồng hồ) |
 | C1, B5 USART3 (cổng số 4) | Chưa thử |
