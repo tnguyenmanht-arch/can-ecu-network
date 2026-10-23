@@ -82,6 +82,39 @@ Thanh ghi CAN1 hữu ích (cần `-halt`): `CAN1->MSR` `0x40006404`, `CAN1->TSR`
 | `g_rx_isr` tăng vọt (hàng nghìn/s), `g_tx_ok` đứng | Bão ngắt: FIFO không được nhả | ISR phải gọi `can_receive` (ghi `RFOM0`); xem `CAN1->RF0R` |
 | `g_tx_busy` tăng | Mailbox 0 không trống | Khung trước chưa gửi xong: `CAN1->TSR`, `CAN1->ESR` (lỗi bus, bus-off) |
 
+## Kết quả 23/10/2026 — ĐẠT
+
+Build `e0af678` (có `NVIC_EnableIRQ`). Nạp lúc 19:11:14: Device ID 0x413, `Download verified successfully`.
+
+**Bộ đếm** (RAM, HOTPLUG không halt):
+
+| | Giờ | tick | `g_tx_ok` | `g_rx_isr` | `g_rx_ok` | `g_rx_mismatch` | `g_tx_busy` | `g_init_err` |
+|---|---|---|---|---|---|---|---|---|
+| A | 19:11:33.839 | 19405 | 194 | 194 | 194 | 0 | 0 | 0 |
+| B | 19:11:43.885 | 29452 | 294 | 294 | 294 | 0 | 0 | 0 |
+| Hiệu | 10,044 s | +10047 (1000,2/s) | **+100** ✅ | **+100** ✅ | **+100** ✅ | 0 ✅ | 0 ✅ | 0 ✅ |
+
+- 3 bộ đếm bằng nhau tuyệt đối, không mất khung nào; 194 = ⌊19405/100⌋ khớp alarm 100 tick
+- Word `0x20000B14` = `0x00000800`: byte thấp `g_init_err` = 0, byte kế `s_rx_dlc` = 8 (khung cuối nhận đủ 8 byte)
+
+**Thanh ghi** (`-halt ... -run`, CLI báo `Core run` ở cuối):
+
+| Thanh ghi | Giá trị | Ý nghĩa | |
+|---|---|---|---|
+| `CAN1->BTR` | `0x401A0005` | đúng giá trị truyền vào `Can_Init`, LBKM = 1 | ✅ |
+| `CAN1->IER` | `0x00000002` | FMPIE0 = 1 | ✅ |
+| `NVIC->ISER0` | `0x00100000` | bit 20 (CAN1_RX0) đã bật | ✅ |
+| `CAN1->MSR` | `0x00000C08` | INAK = 0 (đã thoát init), SLAK = 0, RX = 1 (bus recessive) | ✅ |
+| `CAN1->TSR` | `0x1C000003` | 3 mailbox trống (TME0–2); khung cuối gửi xong (RQCP0, TXOK0) | ✅ |
+| `CAN1->RF0R` | `0x00000000` | FIFO0 rỗng, không FULL, không FOVR → ISR nhả FIFO kịp | ✅ |
+| `CAN1->ESR` | `0x00000000` | không lỗi, TEC = REC = 0 | ✅ |
+| `GPIOD->MODER` | `0x0000000A` | PD0, PD1 = 10 (AF) | ✅ |
+| `GPIOD->AFRL` | `0x00000099` | PD0, PD1 = AF9 (CAN1) | ✅ |
+
+Ghi chú: `CAN1->MSR` có bit 3 WKUI = 1. Đây chỉ là cờ báo, ngắt wakeup (`WKUIE`) không bật nên không ảnh hưởng.
+
+**LED PE10:** nháy 5 lần/s ✅ (đảo mỗi khung, 10 khung/s).
+
 ## Vì sao `main` phải tự gọi `NVIC_EnableIRQ(CAN1_RX0_IRQn)`
 
 Phân tích ELF 23/10: Trampoline target `stm32f407` **không tự bật NVIC cho nguồn ISR2 không phải EXTI** lúc khởi động:
