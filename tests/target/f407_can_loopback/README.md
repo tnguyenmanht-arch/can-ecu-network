@@ -21,7 +21,7 @@ Alarm_CanTx (100 tick) → Task_CanTx: can_send(0x080, 8 byte)
 scripts/trampoline_build.sh tests/target/f407_can_loopback
 ```
 
-⚠️ `build.py` của Trampoline đặt file `.o` tại `build/<đường dẫn APP_SRC>.o`. Với `APP_SRC = "../../../drivers/..."` thì object của `bxcan.c` và `can_port_f407.c` bị ghi ra **`tests/drivers/...`** (ngoài `build/`). Không commit thư mục đó; xoá được bất cứ lúc nào.
+`build.py` của Trampoline đặt file `.o` tại `build/<đường dẫn APP_SRC>.o`. Bản gốc làm object của `APP_SRC = "../../../drivers/..."` rơi ra `tests/drivers/` (ngoài `build/`). Đã sửa trong fork (`make/projfile.py`, submodule commit `3401e21`): mỗi đoạn `..` đổi thành `__`, object nằm ở `build/__/__/__/drivers/...`.
 
 ## Nạp (ST-Link ở H1) — CHỈ khi đã xác nhận
 
@@ -82,12 +82,12 @@ Thanh ghi CAN1 hữu ích (cần `-halt`): `CAN1->MSR` `0x40006404`, `CAN1->TSR`
 | `g_rx_isr` tăng vọt (hàng nghìn/s), `g_tx_ok` đứng | Bão ngắt: FIFO không được nhả | ISR phải gọi `can_receive` (ghi `RFOM0`); xem `CAN1->RF0R` |
 | `g_tx_busy` tăng | Mailbox 0 không trống | Khung trước chưa gửi xong: `CAN1->TSR`, `CAN1->ESR` (lỗi bus, bus-off) |
 
-## ⚠️ Dự đoán trước khi nạp (phân tích ELF 23/10, chưa kiểm trên board)
+## Vì sao `main` phải tự gọi `NVIC_EnableIRQ(CAN1_RX0_IRQn)`
 
-Trampoline target `stm32f407` **không tự bật NVIC cho nguồn ISR2 không phải EXTI** lúc khởi động:
+Phân tích ELF 23/10: Trampoline target `stm32f407` **không tự bật NVIC cho nguồn ISR2 không phải EXTI** lúc khởi động:
 
 - `tpl_init_machine` chỉ gọi `tpl_init_it_priority` (đặt priority IRQ 20 = 0xF0), **không** ghi `NVIC->ISER`
 - Lệnh ghi `NVIC->ISER[0] = 0x100000` (bit 20) chỉ có trong `tpl_enable_os_interrupts`, mà hàm này chỉ được gọi từ `tpl_resume_os_interrupts_service`, và chỉ khi trước đó đã có `SuspendOSInterrupts` (bộ đếm khoá ≠ 0)
 - Ví dụ `readbutton_isr` chạy được vì nguồn EXTI có template riêng gọi `NVIC_EnableIRQ`
 
-→ Dự kiến kẹt ở dòng "`g_tx_ok` tăng, `g_rx_isr` = 0", FIFO0 đầy 3 khung (FMP0 = 3, rồi FOVR0). Cần bật IRQ 20 trước `StartOS` (quyết định cách sửa trước khi nạp).
+→ Thiếu dòng đó thì app sẽ kẹt ở "`g_tx_ok` tăng, `g_rx_isr` = 0" (FIFO0 đầy 3 khung rồi tràn), vì `Task_CanRx` (nơi duy nhất gọi Suspend/Resume) chỉ chạy khi đã có ngắt. Thắng thêm `NVIC_EnableIRQ(CAN1_RX0_IRQn);` sau dòng FMPIE0; trong ELF `main` ghi `0x100000` vào `0xE000E100` (ISER0 bit 20) trước `StartOS`. FIFO còn rỗng nên không có ngắt nào trước khi OS chạy.

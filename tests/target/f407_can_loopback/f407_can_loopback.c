@@ -62,7 +62,8 @@ FUNC(int, OS_APPL_CODE) main(void)
     /* 5. CAN1: 500 kbit/s, loopback; rồi bật công tắc 1 của ngắt: FIFO0 có khung → báo ngắt */
     g_init_err = Can_Init(CAN_BTR_F407_500K_LBK);
     CAN1->IER |= CAN_IER_FMPIE0;
-
+    NVIC_EnableIRQ(CAN1_RX0_IRQn);       /* công tắc 2: mở cổng IRQ 20 ở NVIC */
+    
     beep_once();                         /* nghe bíp = main chạy tới đây */
     StartOS(OSDEFAULTAPPMODE);           /* không bao giờ trả về */
     return 0;
