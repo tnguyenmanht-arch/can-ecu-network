@@ -1,0 +1,70 @@
+OIL_VERSION = "2.5";
+
+/* CAN1 loopback bang ISR loai 2 tren Hiwonder V1.2 (ECU1, HSE 16 MHz, APB1 42 MHz).
+ * Alarm_CanTx 100 tick -> Task_CanTx gui khung 0x080 -> loopback vao FIFO0
+ * -> ngat CAN1_RX0 -> ISR can_rx_isr doc + nha FIFO, ActivateTask(Task_CanRx)
+ * -> Task_CanRx kiem khung, dung thi dao LED PE10. */
+
+IMPLEMENTATION trampoline {
+  TASK { UINT32 STACKSIZE = 512 ; } ;
+  ISR  { UINT32 STACKSIZE = 256 ; } ;
+};
+
+CPU f407_can_loopback {
+  OS config {
+    STATUS = EXTENDED;
+    BUILD = TRUE {
+      /* duong dan tuong doi: tests/target/f407_can_loopback -> goc repo */
+      TRAMPOLINE_BASE_PATH = "../../../third_party/trampoline";
+      APP_SRC = "f407_can_loopback.c";
+      APP_SRC = "../../../drivers/bxcan/bxcan.c";
+      APP_SRC = "../../../drivers/mcu/stm32f407/can_port_f407.c";
+      APP_NAME = "f407_can_loopback_exe";
+      CFLAGS  = "-O2";
+      /* bxcan.h + can_port.h ban F407 (chon chip bang include path) */
+      CFLAGS  = "-I../../../drivers/bxcan";
+      CFLAGS  = "-I../../../drivers/mcu/stm32f407";
+      LDFLAGS = "-Map=f407_can_loopback.map";
+      COMPILER = "arm-none-eabi-gcc";
+      ASSEMBLER = "arm-none-eabi-as";
+      LINKER = "arm-none-eabi-ld";
+      COPIER = "arm-none-eabi-objcopy";
+      SYSTEM = PYTHON;
+    };
+    SYSTEM_CALL = TRUE;
+    MEMMAP = TRUE {
+      COMPILER = gcc;
+      LINKER = gnu_ld { SCRIPT = "script.ld"; };
+      ASSEMBLER = gnu_as;
+      MEMORY_PROTECTION = FALSE;
+    };
+  };
+
+  APPMODE std {};
+
+  TASK Task_CanTx {
+    PRIORITY = 1;
+    AUTOSTART = FALSE;
+    ACTIVATION = 1;
+    SCHEDULE = FULL;
+  };
+
+  TASK Task_CanRx {
+    PRIORITY = 2;
+    AUTOSTART = FALSE;
+    ACTIVATION = 1;
+    SCHEDULE = FULL;
+  };
+
+  ALARM Alarm_CanTx {
+    COUNTER = SystemCounter;
+    ACTION = ACTIVATETASK { TASK = Task_CanTx; };
+    AUTOSTART = TRUE { APPMODE = std; ALARMTIME = 100; CYCLETIME = 100; };
+  };
+
+  ISR can_rx_isr {
+    CATEGORY = 2;
+    PRIORITY = 1;
+    SOURCE = CAN1_RX0_IRQ;
+  };
+};
