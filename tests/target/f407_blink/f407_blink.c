@@ -8,6 +8,8 @@
 #define LED_PIN      (10U)      /* PE10 */
 #define BUZZER_PIN   (8U)       /* PA8  */
 
+volatile uint32_t g_blink_count = 0;    /* số lần task blink đã chạy; đọc qua ST-Link */
+
 #define APP_Task_blink_START_SEC_CODE
 #include "tpl_memmap.h"
 
@@ -34,7 +36,8 @@ FUNC(int, OS_APPL_CODE) main(void)
     GPIOE->MODER |=  (1U << (LED_PIN * 2U));
     GPIOA->MODER &= ~(3U << (BUZZER_PIN * 2U));
     GPIOA->MODER |=  (1U << (BUZZER_PIN * 2U));
-
+    /* 4. Bật HCLK - cho phép debug khi CPU ngủ  */
+    DBGMCU->CR |= DBGMCU_CR_DBG_SLEEP;          /* tên macro: DBGMCU_CR_DBG_SLEEP */
     beep_once();                         /* nghe bíp = main chạy tới đây */
 
     StartOS(OSDEFAULTAPPMODE);           /* không bao giờ trả về */
@@ -44,6 +47,8 @@ FUNC(int, OS_APPL_CODE) main(void)
 /* Task do alarm blink_al gọi mỗi 500 tick (500 ms trên F407) */
 TASK(blink)
 {
+    g_blink_count++;    /* tăng số lần task blink đã chạy */
+    
     if ((GPIOE->ODR & (1U << LED_PIN)) != 0U)    /* đang 1 (LED tắt) */
     {
         GPIOE->BSRRH = (1U << LED_PIN);          /* → 0: LED sáng */

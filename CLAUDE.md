@@ -51,7 +51,7 @@ Chi tiết kiến trúc, nguyên tắc module, dải ID, CAN matrix, cách đấ
 - ✅ DBC nháp 0.2 (`can/vehicle.dbc`, 5/10): 6 message. Thêm khoá cửa trung tâm: `LockStatus` 0x310 (ECU3 → Jetson), `LockCommand` 0x500 (Jetson → ECU3, gửi theo sự kiện; gateway chỉ được gửi dải 0x500–0x5FF), và `GearActual` trong 0x100. Kiểm bằng cantools `strict=True`: hợp lệ. Tải bus lý thuyết ở 500 kbit/s: **3,3 %** theo chu kỳ (122 khung/s), **5,5 %** xấu nhất (`BodyStatus`, `LockStatus` gửi theo sự kiện tối đa 50 khung/s)
 - ✅ Tài liệu kiến trúc; cấu trúc repo và 4 quyết định thiết kế **đã chốt** (mục 7 của tài liệu kiến trúc): repo riêng + Trampoline qua fork/submodule; commit `gen/`; RTE sinh thẳng từ DBC; một driver bxCAN mức thanh ghi dùng chung
 - ✅ Trampoline + goil build được trên Windows, đã vá hard-float + `USEFLOAT`; `tests/target/fpu_check` build đạt (chưa nạp). Xem `docs/trampoline-setup.md`
-- ✅ `tests/target/f407_blink` (23/10): app Trampoline đầu tiên cho Hiwonder V1.2, task `blink` đảo LED PE10 theo alarm 500 tick, bíp 1 lần trước `StartOS`. Build đạt, chưa nạp. Header CMSIS của target là bản cũ (StdPeriph V1.6.0): GPIO không có `BSRR` mà tách `BSRRL` (set) / `BSRRH` (reset), mỗi nửa 16 bit
+- ✅ `tests/target/f407_blink` (23/10): app Trampoline đầu tiên cho Hiwonder V1.2, task `blink` đảo LED PE10 theo alarm 500 tick, bíp 1 lần trước `StartOS`. **Nạp và chạy đạt 23/10** (ST-Link): 999 tick/s, `g_blink_count` +10 trong 5 s, ODR bit 10 đổi đúng. Kết quả và cách đọc: `tests/target/f407_blink/README.md`. Header CMSIS của target là bản cũ (StdPeriph V1.6.0): GPIO không có `BSRR` mà tách `BSRRL` (set) / `BSRRH` (reset), mỗi nửa 16 bit
 - ✅ `f407_bringup/`: firmware kiểm tra board Hiwonder khi hàng về (port từ xe, giữ K1 khi reset để vào chế độ bring-up). **Tên project CubeIDE vẫn là `amr_stm32f407`.** Checklist: `docs/bringup-f407.md`
 - ✅ Board Hiwonder đã về (silkscreen **V1.2**), 22/10. Bring-up xong 22/10 (`f407_bringup` bản HSE 16 MHz, nạp qua cổng serial): clock, LED, buzzer, K1/K2, PD3, I2C2 (QMI8658 @ 0x6A) đạt; USART3 (cổng số 4) chưa thử. Kết quả: `docs/bringup-f407.md`
 - ✅ **ST-Link hoạt động lại với Hiwonder** (23/10). Đấu ở H1: chân 3 SWCLK, chân 5 GND, chân 7 SWDIO, không nối 3.3V; board cấp điện qua USB-C cổng download. `STM32_Programmer_CLI -c port=SWD mode=HOTPLUG`: ST-LINK FW V2J46S7, Device ID 0x413, Flash 512 KB. Đọc khi `f407_bringup` đang chạy: `RCC->PLLCFGR` = 0x07405410 (PLLM 16, N 336, P ÷2, nguồn HSE, Q 7), `RCC->CFGR` = 0x0000940A (SWS = PLL, AHB ÷1, APB1 ÷4, APB2 ÷2) → **SYSCLK 168 MHz, APB1 42 MHz, APB2 84 MHz**. Lần thử đầu 23/10 báo `No STM32 target found!` do **board chưa cấp nguồn (quên cắm USB-C)**: ST-Link không cấp điện cho chip vì không nối chân 3.3V; 22/10 laptop không thấy ST-Link ("No debug probe detected")
@@ -86,6 +86,14 @@ python -c "import cantools; db=cantools.database.load_file('can/vehicle.dbc', st
 
 # Đọc thanh ghi khi board đang chạy: BẮT BUỘC mode=HOTPLUG (mode mặc định tự halt core, đọc ra toàn 0 giả)
 STM32_Programmer_CLI.exe -c port=SWD mode=HOTPLUG -r32 <địa chỉ> 1
+
+# App Trampoline: task IDLE ngủ bằng `wfe` gần như suốt thời gian. Hai việc bắt buộc:
+#  (a) Trong main, trước StartOS: DBGMCU->CR |= DBGMCU_CR_DBG_SLEEP;  -> thiếu dòng này HOTPLUG báo "Unable to get core ID"
+#  (b) RAM (0x2000xxxx) đọc HOTPLUG bình thường. NGOẠI VI (0x4000xxxx: GPIO, RCC...) đọc HOTPLUG khi CPU đang ngủ ra RÁC
+#      (CLI không báo lỗi, in lại giá trị cũ, ví dụ 0x080013E5 = địa chỉ CallTerminateTask ở MỌI thanh ghi).
+#      Phải halt chớp nhoáng (~0,1 s) rồi cho chạy lại. Đã kiểm 23/10 với f407_blink: ODR/MODER/AHB1ENR ra đúng.
+STM32_Programmer_CLI.exe -c port=SWD mode=HOTPLUG -halt -r32 0x40021014 4 -run
+#      Muốn không làm dừng CPU thì cho task chép trạng thái vào 1 biến RAM rồi đọc biến đó (ví dụ g_blink_count)
 
 # Nạp Hiwonder qua cổng download (cổng USB số 7, CH9102, USART1, ví dụ COM16) khi không có ST-Link — CHỈ khi user đã xác nhận
 # 1) Tạo .bin từ ELF (objcopy đi kèm CubeIDE)
