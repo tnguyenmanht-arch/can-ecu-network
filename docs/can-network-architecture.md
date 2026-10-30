@@ -250,9 +250,9 @@ Cấu hình CubeMX của firmware F103 cũ (HSE 8 MHz → 72 MHz, SYS Debug = Se
 
 ## 8. Việc chưa xác định, rủi ro
 
-- **Trampoline chưa có driver CAN cho stm32f407.** Phải tự viết ISR2 cho CAN1 RX và driver bxCAN (mục 7, quyết định 4), cộng với BSP cho board Hiwonder (`docs/trampoline-setup.md`, mục 6).
+- **Driver CAN trên Trampoline stm32f407:** Trampoline không có sẵn, nên đã tự viết driver bxCAN (mục 7, quyết định 4) và ISR2 cho CAN1 RX; chạy loopback đạt 23/10 (`tests/target/f407_can_loopback`). Target không tự bật NVIC cho ISR2 không phải EXTI, app phải gọi `NVIC_EnableIRQ` trước `StartOS`. **Chưa thử trên bus thật** (cần SN65HVD230 cho các node còn lại).
 - **Jetson J17:** chưa xác nhận pinout, pinmux và mức điện áp trên board thật.
-- **Board Hiwonder:** chưa kiểm tra ngoài đời. Vẫn dùng checklist `docs/bringup-f407.md` cho phần nguồn, nạp code, LED, buzzer; phần motor và servo trong checklist đó không cần nữa.
+- **Board Hiwonder:** bring-up xong 22/10 (bản V1.2, HSE 16 MHz; kết quả trong `docs/bringup-f407.md`). Còn lại: USART3 (cổng số 4) chưa thử; rail VIN bị nuôi ngược ~4,2 V khi chỉ cắm USB, nên không cắm motor/servo khi chỉ có USB.
 - **Chiều truyền Jetson ↔ Android** (WebSocket, UDP hay khác): quyết cùng ĐACN. Chiều app → Jetson mang lệnh khoá.
 - **Cơ cấu khoá ECU3:** bản chính dùng LED mô phỏng (chọn 29/10). `LockState` = 2 (lỗi) **để dành**: bản LED không phát hiện được lỗi cơ cấu nên không dùng giá trị này. *Ghi chú phần mở rộng:* nếu làm servo SG90 thì đây là cơ cấu chấp hành (nguồn 5 V riêng, GND chung, test cần xác nhận), và SG90 không có phản hồi vị trí.
 - **Lệnh từ app xuống bus:** gateway là cửa ngõ duy nhất từ ngoài vào; phải test chặn ID ngoài dải 0x500–0x5FF.
