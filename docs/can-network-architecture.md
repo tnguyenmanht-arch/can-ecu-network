@@ -1,6 +1,6 @@
 # Mạng ECU ô tô trên bàn qua CAN (ĐAKS)
 
-Hướng đồ án chốt với GVHD ngày 30/9/2026. Đây là bản kiến trúc đầu tiên, **chưa có firmware**.
+Hướng đồ án chốt với GVHD ngày 30/9/2026. Hiện trạng (30/10/2026): driver bxCAN chạy loopback trên F103 và F407, Trampoline nhận CAN bằng ISR loại 2 trên F407; DBC 1.0 chốt 30/10; đang ở GĐ 3 (thiết kế).
 Hợp đồng giữa các ECU là file [`can/vehicle.dbc`](../can/vehicle.dbc) (bản 1.0, chốt 30/10/2026).
 
 ## 1. Mục tiêu
@@ -48,15 +48,17 @@ Không còn thuộc đồ án: xe AMR, jitter và điều khiển chuyển độ
 - **ECU3 là bên quyết định cuối cùng**, theo hướng **an toàn = mở được** (người trong xe luôn thoát ra được):
   - Chỉ từ chối lệnh **mở từ app** khi `VehicleSpeed` > 15 km/h.
   - Nút khoá/mở trên ECU3 **luôn mở được**.
-  - Tự khoá khi `VehicleSpeed` > 15 km/h. Đề xuất: khoá một lần khi tốc độ vượt ngưỡng (sườn lên), không khoá lặp lại.
+  - Tự khoá một lần khi `VehicleSpeed` vượt lên trên 15 km/h (sườn lên), chỉ tự khoá lại sau khi xuống dưới 10 km/h.
   - Mất `VehSpeed` (quá timeout 100 ms) thì **không tự khoá và không chặn mở**.
 - Báo trạng thái qua `LockStatus` (0x310): theo chu kỳ 100 ms và ngay khi đổi. `LockCmdCounterEcho` trả lại bộ đếm của lệnh gần nhất đã xử lý; `LockCmdResult` cho biết lệnh đó đã làm (Done), bị từ chối (Rejected) hay đã ở đúng trạng thái (AlreadyInState).
-- Cơ cấu khoá, chọn sau:
+- Cơ cấu khoá:
 
   | Phương án | Ưu | Nhược |
   |---|---|---|
   | Servo SG90 | Chuyển động thật, demo trực quan | Là cơ cấu chấp hành: cần nguồn 5 V riêng (dòng có thể lên vài trăm mA khi quay hoặc kẹt), không lấy từ 3,3 V của F103; GND chung; cần 1 kênh PWM 50 Hz; không có phản hồi vị trí |
   | LED mô phỏng | Đơn giản, an toàn, không cần nguồn thêm | Kém trực quan |
+
+  **Đã chọn: LED mô phỏng (29/10); servo SG90 để phần mở rộng.**
 
 **Mở rộng tuỳ chọn:**
 - ECU4 BMS.
@@ -106,7 +108,7 @@ Chiều ngược lại, từ app xuống bus: Jetson là cửa ngõ duy nhất t
 
 | Tầng | Ở đâu | Làm gì | Ví dụ trong dự án |
 |---|---|---|---|
-| 1. Hành động an toàn | ECU, tự quyết | Tự đưa hệ về trạng thái an toàn, không chờ ai | ECU3 tự khoá khi `VehicleSpeed` > 15 km/h, từ chối lệnh mở từ app khi > 15 km/h (nút trên ECU3 luôn mở được); VCU xử lý khi mất `Pedal` |
+| 1. Hành động an toàn | ECU, tự quyết | Tự đưa hệ về trạng thái an toàn, không chờ ai | ECU3 tự khoá một lần khi `VehicleSpeed` vượt lên trên 15 km/h (sườn lên), chỉ tự khoá lại sau khi xuống dưới 10 km/h; từ chối lệnh mở từ app khi > 15 km/h (nút trên ECU3 luôn mở được); VCU xử lý khi mất `Pedal` |
 | 2. Cảnh báo tại chỗ | ECU, phần cứng gắn trên ECU | Báo người lái bằng âm thanh, đèn | VCU bật buzzer PA8 và LED đèn báo khi cửa mở và `VehicleSpeed` > 3 km/h |
 | 3. Hiển thị lại | App Android (ĐACN), qua Jetson | Hiển thị trạng thái và cảnh báo mà tầng 1–2 đã quyết; không quyết định an toàn | Biểu tượng cửa mở, trạng thái khoá, cảnh báo "khoá không phản hồi" |
 
@@ -176,8 +178,8 @@ Vẫn dư rất nhiều chỗ cho ECU4 hoặc UDS.
 | 1× STM32F103C8T6 | 3× module SN65HVD230 (2 cho F103, 1 cho Jetson) |
 | Jetson Orin Nano | Dây xoắn đôi |
 | ST-Link | Hàng rào chân cho J17 nếu chưa hàn |
-| | LED + trở hạn dòng cho đèn báo ECU1; nút khoá/mở cho ECU3 |
-| | Cơ cấu khoá ECU3: servo SG90 **hoặc** LED + trở (chọn sau) |
+| | LED + trở hạn dòng cho đèn báo ECU1 |
+| | ECU3: 4 LED + 4 trở 330 Ω (xi-nhan trái, xi-nhan phải, phanh, khoá); 1 công tắc gạt ON-OFF-ON cho xi-nhan; 2 công tắc gạt (cửa, pha); 1 nút khoá/mở |
 
 **LED đèn báo ECU1:** đề xuất **PE2** trên header H1, là chân để trống theo bảng chân trong `CLAUDE.md` mục 6 (số chân trên H1 cần đối chiếu board thật). **Phải dò schematic V1.1 trước khi hàn.** Không dùng LED có sẵn PE10, vì PE10 đã dùng báo bring-up và nhịp tim. Đặt LED cạnh buzzer trên bàn.
 
@@ -252,7 +254,7 @@ Cấu hình CubeMX của firmware F103 cũ (HSE 8 MHz → 72 MHz, SYS Debug = Se
 - **Jetson J17:** chưa xác nhận pinout, pinmux và mức điện áp trên board thật.
 - **Board Hiwonder:** chưa kiểm tra ngoài đời. Vẫn dùng checklist `docs/bringup-f407.md` cho phần nguồn, nạp code, LED, buzzer; phần motor và servo trong checklist đó không cần nữa.
 - **Chiều truyền Jetson ↔ Android** (WebSocket, UDP hay khác): quyết cùng ĐACN. Chiều app → Jetson mang lệnh khoá.
-- **Cơ cấu khoá ECU3:** nếu chọn servo SG90 thì đây là cơ cấu chấp hành (nguồn 5 V riêng, GND chung, test cần xác nhận). SG90 không có phản hồi vị trí nên `LockState` = 2 (lỗi) chỉ báo được lỗi ECU3 tự phát hiện; cách phát hiện chốt ở giai đoạn thiết kế.
+- **Cơ cấu khoá ECU3:** bản chính dùng LED mô phỏng (chọn 29/10). `LockState` = 2 (lỗi) **để dành**: bản LED không phát hiện được lỗi cơ cấu nên không dùng giá trị này. *Ghi chú phần mở rộng:* nếu làm servo SG90 thì đây là cơ cấu chấp hành (nguồn 5 V riêng, GND chung, test cần xác nhận), và SG90 không có phản hồi vị trí.
 - **Lệnh từ app xuống bus:** gateway là cửa ngõ duy nhất từ ngoài vào; phải test chặn ID ngoài dải 0x500–0x5FF.
 
 ## 9. Đánh giá (dự kiến)
@@ -263,5 +265,5 @@ Cấu hình CubeMX của firmware F103 cũ (HSE 8 MHz → 72 MHz, SYS Debug = Se
 - Thời gian phát hiện mất ECU (so với timeout đặt trong DBC).
 - Giả lập lỗi: rút một node, gửi message sai độ dài hoặc sai giá trị.
 - Vòng lệnh khoá: từ lúc Jetson gửi `LockCommand` tới lúc thấy `LockStatus` có echo trùng (đo trên Jetson, một đồng hồ). App coi quá 500 ms là "khoá không phản hồi".
-- Khoá cửa: tự khoá ở 15 km/h; từ chối lệnh mở từ app khi > 15 km/h; nút ECU3 luôn mở được; mất `VehSpeed` thì không tự khoá, không chặn mở; gateway chặn ID ngoài dải 0x500–0x5FF.
+- Khoá cửa: tự khoá một lần khi `VehicleSpeed` vượt lên trên 15 km/h (sườn lên), chỉ tự khoá lại sau khi xuống dưới 10 km/h; từ chối lệnh mở từ app khi > 15 km/h; nút ECU3 luôn mở được; mất `VehSpeed` thì không tự khoá, không chặn mở; gateway chặn ID ngoài dải 0x500–0x5FF.
 - Phần mở rộng (chọn sau): UDS chẩn đoán (0x7E0/0x7E8) hoặc E2E (counter + CRC) cho `Pedal`.
