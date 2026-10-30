@@ -34,7 +34,7 @@ Chi tiết kiến trúc, nguyên tắc module, dải ID, CAN matrix, cách đấ
 
 ### Quy ước code
 - Comment tiếng Việt cho logic quan trọng. Comment trong file DBC viết **không dấu** (công cụ DBC đọc theo cp1252)
-- STM32: prefix `APP_` cho tầng ứng dụng, `DRV_` cho driver. BSW theo tên AUTOSAR (`Com_`, `CanIf_`, `Rte_`, `SchM_`)
+- STM32: prefix `APP_` cho tầng ứng dụng; driver CAN đặt tên theo module Can của AUTOSAR (`Can_Init`, `Can_Write`, `Can_IsrRx`...). BSW theo tên AUTOSAR (`Com_`, `CanIf_`, `Rte_`, `SchM_`)
 - COM và CanIf là **C thuần, KHÔNG gọi HAL**, dùng chung F407 và F103. Chỉ driver phụ thuộc chip
 - File trong `gen/` do comgen sinh ra, **commit vào git, KHÔNG sửa tay**
 
