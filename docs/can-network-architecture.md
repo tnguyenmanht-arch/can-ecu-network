@@ -1,7 +1,7 @@
 # Mạng ECU ô tô trên bàn qua CAN (ĐAKS)
 
 Hướng đồ án chốt với GVHD ngày 30/9/2026. Đây là bản kiến trúc đầu tiên, **chưa có firmware**.
-Hợp đồng giữa các ECU là file [`can/vehicle.dbc`](../can/vehicle.dbc) (bản nháp 0.2).
+Hợp đồng giữa các ECU là file [`can/vehicle.dbc`](../can/vehicle.dbc) (bản 1.0, chốt 30/10/2026).
 
 ## 1. Mục tiêu
 
@@ -31,9 +31,9 @@ Không còn thuộc đồ án: xe AMR, jitter và điều khiển chuyển độ
 
 | Node | Phần cứng | Phần mềm | Gửi | Nhận |
 |---|---|---|---|---|
-| ECU1 VCU | Hiwonder ROS Robot Controller (STM32F407VET6), transceiver VP230 và trở 120 Ω R23 **có sẵn trên board**. Buzzer PA8; LED đèn báo rời (đề xuất PE2, xem mục 5) | Trampoline (OSEK): ISR2 nhận CAN, Alarm gửi theo chu kỳ, Resource bảo vệ dữ liệu chung | `VehSpeed`, `Battery` | `Pedal`, `BodyStatus` |
+| ECU1 VCU | Hiwonder ROS Robot Controller (STM32F407VET6), transceiver VP230 và trở 120 Ω R23 **có sẵn trên board**. Buzzer PA8; LED đèn báo rời (đề xuất PE2, xem mục 5) | Trampoline (OSEK): ISR2 nhận CAN, Alarm gửi theo chu kỳ, Resource bảo vệ dữ liệu chung | `VehSpeed`, `VcuStatus`, `Battery` | `Pedal`, `BodyStatus` |
 | ECU2 Pedal | STM32F103C8T6 + SN65HVD230. Biến trở = chân ga, nút = phanh, công tắc = số P/R/N/D | Bare-metal HAL + COM chung | `Pedal` | — |
-| ECU3 Body | STM32F103C8T6 + SN65HVD230. Công tắc cửa, cần xi-nhan, công tắc đèn pha, nút khoá/mở; LED xi-nhan, LED phanh; cơ cấu khoá (servo SG90 hoặc LED mô phỏng, chưa chọn) | Bare-metal HAL + COM chung | `BodyStatus`, `LockStatus` | `Pedal` (lấy `Brake` để bật LED phanh), `VehSpeed` (lấy `VehicleSpeed` để tự khoá), `LockCommand` |
+| ECU3 Body | STM32F103C8T6 + SN65HVD230. Công tắc cửa, cần xi-nhan, công tắc đèn pha, nút khoá/mở; 4 LED rời: xi-nhan trái, xi-nhan phải, phanh, khoá (cơ cấu khoá mô phỏng bằng LED; servo SG90 để phần mở rộng) | Bare-metal HAL + COM chung | `BodyStatus`, `LockStatus` | `Pedal` (lấy `Brake` để bật LED phanh), `VehSpeed` (lấy `VehicleSpeed` để tự khoá), `LockCommand` |
 | Jetson (gateway) | Orin Nano, CAN qua header J17 + SN65HVD230 | Linux, SocketCAN (`mttcan`), Python + cantools. Chỉ được gửi ID trong dải 0x500–0x5FF | `LockCommand` (dịch từ lệnh của app) | Tất cả |
 | Android HMI | Tablet hoặc máy ảo Android | App Kotlin, màn hình trung tâm (ĐACN, repo riêng) | Lệnh khoá/mở, qua Jetson | Tín hiệu theo tên, từ Jetson |
 
@@ -112,7 +112,7 @@ Chiều ngược lại, từ app xuống bus: Jetson là cửa ngõ duy nhất t
 
 Tầng 1–2 phải chạy đúng cả khi Jetson tắt hoặc mất Wi-Fi. Ngưỡng 3 km/h dùng chung cho tầng 2 và tầng 3.
 
-## 4. CAN matrix (bản nháp 0.2)
+## 4. CAN matrix (bản 1.0)
 
 Quy ước chung:
 - CAN thường 500 kbit/s, ID 11 bit (F407 và F103 không có CAN FD).
@@ -124,6 +124,7 @@ Quy ước chung:
 |---|---|---|---|---|---|
 | 0x080 | ECU2 | `Pedal` | 20 ms | 100 ms | `AccelPedal_pct`, `Brake`, `Gear` |
 | 0x100 | ECU1 | `VehSpeed` | 20 ms | 100 ms | `VehicleSpeed`, `MotorRpm`, `GearActual` |
+| 0x110 | ECU1 | `VcuStatus` | 100 ms | 500 ms | `IgnitionOn`, `ReadyState`, `PedalLost`, `BodyLost`, `DoorWarnLevel` |
 | 0x300 | ECU3 | `BodyStatus` | 100 ms, và gửi ngay khi đổi (cách nhau tối thiểu 20 ms) | 500 ms | `DoorFL/FR/RL/RR`, `TurnLeft`, `TurnRight`, `Headlight` |
 | 0x310 | ECU3 | `LockStatus` | 100 ms, và gửi ngay khi đổi (cách nhau tối thiểu 20 ms) | 500 ms | `LockState`, `LockSource`, `LockCmdCounterEcho`, `LockCmdResult` |
 | 0x400 | ECU1 | `Battery` | 500 ms | 2500 ms | `Soc_pct`, `BattVoltage`, `LowBattWarn` |
@@ -139,6 +140,11 @@ Timeout lấy bằng 5 chu kỳ; `LockCommand` không gửi theo chu kỳ nên k
 | `VehicleSpeed` | 0 | 16 | 0,01 km/h | 0–250 | Độ lớn, không dấu; chiều chạy suy từ `Gear` |
 | `MotorRpm` | 16 | 16 có dấu | 1 rpm | ±12000 | Âm khi lùi; 0x8000 = SNA |
 | `GearActual` | 32 | 3 | enum | như `Gear` | Số VCU **thực sự cài**; có thể khác `Gear`, ví dụ không vào R khi xe đang tiến |
+| `IgnitionOn` | 0 | 1 | — | 0/1 | Khoá điện: 1 = ON (công tắc số 1, PD3 = 0 ổn định ≥ 50 ms) |
+| `ReadyState` | 1 | 1 | — | 0/1 | 1 = READY: vào khi khoá điện ON + `Brake` = 1 + bấm K1; ra khi khoá điện OFF hoặc bấm K1 lúc `VehicleSpeed` < 1 km/h. Chưa READY thì ga không có tác dụng |
+| `PedalLost` | 2 | 1 | — | 0/1 | 1 = mất `Pedal` quá 100 ms; VCU coi ga = 0 |
+| `BodyLost` | 3 | 1 | — | 0/1 | 1 = mất `BodyStatus` quá 500 ms |
+| `DoorWarnLevel` | 8 | 3 | enum | 0 Off, 1 Reminder, 2 Warning, 3 Unknown, 7 SNA | Mức cảnh báo cửa VCU đang phát: 1 = cửa mở, khoá điện ON, ≤ 3 km/h (LED PE2 sáng liền); 2 = cửa mở và > 3 km/h, tắt khi < 2 km/h (buzzer PA8 + LED PE2 nháy 2 Hz); 3 = mất ECU3, không biết trạng thái cửa (LED nháy 0,5 Hz, buzzer im) |
 | `DoorFL…DoorRR` | 0–3 | 1 mỗi cửa | — | 0/1 | 1 = mở. Bản đầu chỉ có 1 công tắc, nối vào `DoorFL` |
 | `TurnLeft`, `TurnRight` | 8, 9 | 1 | — | 0/1 | Trạng thái **cần gạt**, không phải đèn đang sáng. ECU3 tự nháy LED, HMI tự nháy biểu tượng |
 | `Headlight` | 16 | 2 | enum | 0 tắt, 1 cos, 2 pha, 3 SNA | Bản đầu chỉ có công tắc bật/tắt |
@@ -156,8 +162,8 @@ Byte 6–7 của `Pedal` để trống, dự phòng cho E2E (counter + CRC) nế
 `AccelPedal_pct`, `Brake`, `Gear` gom thành signal group `PedalGroup`, để bên nhận luôn đọc được bộ 3 giá trị nhất quán.
 
 **Tải bus lý thuyết** (đọc chu kỳ từ DBC bằng cantools): mỗi khung 8 byte, xấu nhất 135 bit (tính cả bit stuffing).
-- Chỉ tính phần gửi theo chu kỳ: 50 + 50 + 10 + 10 + 2 = 122 khung/s → **16 470 bit/s = 3,3 %** của 500 kbit/s.
-- Xấu nhất, khi `BodyStatus` và `LockStatus` cùng gửi theo sự kiện ở tốc độ tối đa (cách nhau 20 ms, tức 50 khung/s mỗi message): 202 khung/s → 27 270 bit/s = **5,5 %**.
+- Chỉ tính phần gửi theo chu kỳ: 50 (`Pedal`) + 50 (`VehSpeed`) + 10 (`VcuStatus`) + 10 (`BodyStatus`) + 10 (`LockStatus`) + 2 (`Battery`) = 132 khung/s → **17 820 bit/s = 3,6 %** của 500 kbit/s.
+- Xấu nhất, khi `BodyStatus` và `LockStatus` cùng gửi theo sự kiện ở tốc độ tối đa (cách nhau 20 ms, tức 50 khung/s mỗi message): 212 khung/s → 28 620 bit/s = **5,7 %**.
 - `LockCommand` gửi theo lần bấm, không đáng kể.
 
 Vẫn dư rất nhiều chỗ cho ECU4 hoặc UDS.
