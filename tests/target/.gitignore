@@ -9,3 +9,4 @@
 fpu_check/fpu_check/
 f407_blink/f407_blink/
 f407_can_loopback/f407_can_loopback/
+bus2_f407_rx/bus2_f407_rx/
