@@ -87,3 +87,31 @@ Giải mã ESR: xem README bên gửi (REC [31:24], TEC [23:16], LEC [6:4], BOFF
 | `g_rx_gap` > 0 và tăng dần | Mất khung | ISR ghi đè bộ đệm 1 khung trước khi task kịp chép (ACTIVATION = 1); hoặc FIFO tràn (`RF0R` FOVR0) |
 | `g_rx_isr` tăng vọt, `tpl_time_counter` gần như đứng | Bão ngắt: FIFO không được nhả | ISR phải gọi `can_receive` (ghi `RFOM0`) |
 | TEC/REC > 0 tăng dần | Lỗi lẻ tẻ trên dây | Trở đầu cuối (≈ 60 Ω giữa CANH–CANL khi tắt nguồn), dây xoắn, tiếp xúc |
+
+## Kết quả 31/10/2026 — ĐẠT
+
+Bus thật 2 node: F103 **board 1** (`bus2_f103_tx`) + SN65HVD230, **bộ dây mới** ↔ Hiwonder V1.2 (`bus2_f407_rx`). Điện trở CANH–CANL đo khi tắt nguồn: **53,8 Ω** (2 trở 120 Ω song song, mong đợi ≈ 60 Ω). Đọc RAM bằng HOTPLUG, không halt; mỗi lần chỉ một ST-Link nên 2 phía đo lệch giờ nhau.
+
+**Phía gửi — F103 board 1** (`-r32 0x20000020 0x18`):
+
+| | Giờ | `g_tx_req` | `g_tx_done` | `g_tx_busy` | `g_tick_ms` | `g_esr` |
+|---|---|---|---|---|---|---|
+| A | 12:26:10.077 | 600 | 599 | 0 | 60009 | `0x00000000` |
+| B | 12:26:20.364 | 702 | 701 | 0 | 70264 | `0x00000000` |
+| Hiệu | | **+102** ✅ | **+102** ✅ | **+0** ✅ | +10255 ms | TEC = REC = 0, LEC = 0 ✅ |
+
+`g_init_err` = 0, `g_clk_err` = 0. `g_tx_busy` = 0 từ lúc khởi động: có ACK ngay từ khung đầu.
+
+**Phía nhận — F407** (`-r32 0x20000B00 0x14`):
+
+| | Giờ | `g_rx_ok` | `g_rx_isr` | `g_rx_gap` | `s_last_seq` | `g_esr` |
+|---|---|---|---|---|---|---|
+| A | 12:29:55.870 | 461 | 461 | 0 | 204 | `0x00000000` |
+| B | 12:30:06.180 | 564 | 564 | 0 | 51 | `0x00000000` |
+| Hiệu | 10,31 s | **+103** ✅ | **+103** ✅ | **0** ✅ | 204 + 103 = 307 → 307 − 256 = 51 ✅ | TEC = REC = 0, LEC = 0 ✅ |
+
+`g_init_err` = 0. Số thứ tự khớp tuyệt đối (qua cả lúc quay vòng 255 → 0), `g_rx_isr` = `g_rx_ok` (mọi khung là 0x080). **LED PE10 nháy đều** ✅.
+
+## Gỡ lỗi 30–31/10
+
+Lỗi nằm ở phía gửi (dây CAN RX → PB8 của F103 tiếp xúc chập chờn), phía F407 không phải sửa gì. Chi tiết: [`../bus2_f103_tx/README.md`](../bus2_f103_tx/README.md#gỡ-lỗi-3031-10).

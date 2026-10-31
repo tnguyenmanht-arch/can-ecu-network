@@ -84,3 +84,54 @@ STM32_Programmer_CLI.exe -c port=SWD mode=HOTPLUG -r32 0x20000020 0x18 -r32 0x40
 | `g_tx_done` tăng nhưng TEC/REC > 0 và tăng dần | Có lỗi lẻ tẻ trên đường dây | Trở đầu cuối (đo ≈ 60 Ω), dây không xoắn/quá dài, tiếp xúc lỏng; LEC cho biết loại lỗi |
 | ESR BOFF = 1 | Bus-off (TEC > 255) | Lỗi kéo dài; sau khi sửa phải reset F103 (driver chưa bật ABOM) |
 | F103 đạt mà F407 `g_rx_ok` = 0 | Phía nhận | Có ACK nghĩa là bxCAN F407 đã thấy khung (ACK làm ở phần cứng, không phụ thuộc bộ lọc) → nghi **ngắt** (FMPIE0, NVIC IRQ 20) hoặc **bộ lọc**. Xem bảng chẩn đoán ở README bên nhận |
+
+## Kết quả 31/10/2026 — ĐẠT
+
+Bus thật 2 node: F103 **board 1** (`bus2_f103_tx`) + SN65HVD230, **bộ dây mới** ↔ Hiwonder V1.2 (`bus2_f407_rx`). Điện trở CANH–CANL đo khi tắt nguồn: **53,8 Ω** (2 trở 120 Ω song song, mong đợi ≈ 60 Ω). Đọc RAM bằng HOTPLUG, không halt; mỗi lần chỉ một ST-Link nên 2 phía đo lệch giờ nhau.
+
+**Phía gửi — F103 board 1** (`-r32 0x20000020 0x18`):
+
+| | Giờ | `g_tx_req` | `g_tx_done` | `g_tx_busy` | `g_tick_ms` | `g_esr` |
+|---|---|---|---|---|---|---|
+| A | 12:26:10.077 | 600 | 599 | 0 | 60009 | `0x00000000` |
+| B | 12:26:20.364 | 702 | 701 | 0 | 70264 | `0x00000000` |
+| Hiệu | | **+102** ✅ | **+102** ✅ | **+0** ✅ | +10255 ms | TEC = REC = 0, LEC = 0 ✅ |
+
+`g_init_err` = 0, `g_clk_err` = 0. `g_tx_busy` = 0 từ lúc khởi động: có ACK ngay từ khung đầu.
+
+**Phía nhận — F407** (`-r32 0x20000B00 0x14`):
+
+| | Giờ | `g_rx_ok` | `g_rx_isr` | `g_rx_gap` | `s_last_seq` | `g_esr` |
+|---|---|---|---|---|---|---|
+| A | 12:29:55.870 | 461 | 461 | 0 | 204 | `0x00000000` |
+| B | 12:30:06.180 | 564 | 564 | 0 | 51 | `0x00000000` |
+| Hiệu | 10,31 s | **+103** ✅ | **+103** ✅ | **0** ✅ | 204 + 103 = 307 → 307 − 256 = 51 ✅ | TEC = REC = 0, LEC = 0 ✅ |
+
+`g_init_err` = 0. Số thứ tự khớp tuyệt đối (qua cả lúc quay vòng 255 → 0), `g_rx_isr` = `g_rx_ok` (mọi khung là 0x080). **LED PE10 nháy đều** ✅.
+
+## Gỡ lỗi 30–31/10
+
+**Triệu chứng:**
+
+| Quan sát | Số liệu |
+|---|---|
+| F103: lỗi bit trội rồi bus-off | `g_esr` = `0x00F80057`: LEC = 5 (bit dominant error), BOFF = 1, TEC vượt 255; `g_tx_busy` tăng đều, mailbox 0 kẹt (TSR TME0 = 0, TERR0 = 1) |
+| Số khung chạy được trước khi hỏng thay đổi mỗi lần | 41 khung / 5 khung / 0 khung |
+| Chạm vào dây là hỏng | — |
+
+**Khoanh vùng:**
+
+| Bước | Làm gì | Kết quả |
+|---|---|---|
+| 1 | Đọc phía F407 (`-halt`): MSR, RF0R, IER, ESR, NVIC ISER0/ISPR0 | Phía nhận sẵn sàng và rảnh: FIFO0 rỗng, FMPIE0 = 1, IRQ 20 bật, ESR = 0 → lỗi không ở F407 |
+| 2 | F103 đứng một mình (tách CANH/CANL khỏi bus) | Vẫn LEC = 5 + bus-off. Node có transceiver tốt đứng một mình chỉ được lỗi ACK (LEC = 3), TEC dừng ~128 → lỗi nằm trong vòng F103 → module → F103 |
+| 3 | Dừng CPU, ép PB9 = 0 / 1 bằng ST-Link (ghi CRH, BRR, BSRR), đọc IDR; đo chân D, R của module và CANH–CANL bằng đồng hồ | PB9 đổi 0 ↔ 1 nhưng **PB8 luôn đọc 1** (61 lần đọc trong 30 s) |
+| 4 | Đổi sang F103 board 2 + bộ dây mới | Đạt (+102 / +102 / +0, ESR = 0) |
+| 5 | Quay lại board 1 + bộ dây mới | Đạt, giống hệt board 2 → board 1 không hỏng |
+
+**Thủ phạm:** đầu dupont cũ của dây CAN RX → PB8 bị loe, tiếp xúc chập chờn.
+
+**Bài học:**
+- bxCAN **cần đường RX để gửi**: mỗi bit phát ra đều được đọc lại để so. RX đứt thì node tự báo lỗi bit (LEC = 5) dù TX vẫn tốt
+- Driver hiện **chưa bật ABOM** (tự thoát bus-off), nên chỉ một đợt nhiễu đủ dài là node im lặng vĩnh viễn tới khi reset. Sẽ bật ABOM ở GĐ 5
+- **Thay dây trước khi nghi board.** Dây dupont cũ, đầu loe là nghi phạm đầu tiên khi lỗi chập chờn và số khung chạy được thay đổi mỗi lần
